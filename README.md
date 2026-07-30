@@ -13,13 +13,13 @@ export PYTHONPATH=$(pwd):$PYTHONPATH
 
 ## Datasets
 
-This project requires **3 public breast-ultrasound segmentation datasets**. The dataset root is hard-coded in the code as a **sibling `data` directory** of the repository (each model script uses `../../data/...`, and `visualize_comparison.py` also uses `(CLADS / ".." / "data")`).
+This project requires **3 public breast-ultrasound segmentation datasets**. The dataset root is hard-coded in the code as a **sibling `data` directory** of the repository (each model script uses `../../data/...`, and `visualize_comparison.py` also uses `(DPRASR / ".." / "data")`).
 
-Therefore, create the `data` folder **next to** the `CLADS-Net` folder. For example:
+Therefore, create the `data` folder **next to** the `DPRASR-Net` folder. For example:
 
 ```
 D:/PycharmProjects/
-├── CLADS-Net/          <- this repository
+├── DPRASR-Net/          <- this repository
 └── data/               <- datasets go here (scripts automatically look in ../data)
 ```
 
@@ -96,7 +96,7 @@ mv "/tmp/bus-uclm/BUS-UCLM Breast ultrasound lesion segmentation dataset" \
 
 > ⚠️ **Note: the raw Mendeley package layout differs from what the code expects.**
 > The official package stores images and masks in two separate subfolders (plus a metadata CSV), whereas the
-> training script `CLADSNet/BUS_UCLM.py::get_dataset_paths()` requires three folders — `benign/`, `malign/`, `masks/` —
+> training script `DPRASRNet/BUS_UCLM.py::get_dataset_paths()` requires three folders — `benign/`, `malign/`, `masks/` —
 > and the mask filenames inside `masks/` must **correspond one-to-one** with the image filenames in `benign/` and `malign/`.
 > You must reorganize the data after downloading.
 
