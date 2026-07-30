@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from seed.set_seed import set_seed
 """
-run_all.py - clads 全模型串行训练自动调度脚本
+run_all.py - DPRASR 全模型串行训练自动调度脚本
 ============================================================
 功能：
   1. 串行运行所有模型训练，顺序：先所有模型 BUS-UCLM -> 再所有模型 udiat -> 最后所有模型 busi
@@ -23,9 +23,9 @@ import traceback
 from pathlib import Path
 from datetime import datetime
 
-# clads 根目录（本脚本所在目录）
-CLADS = Path(__file__).resolve().parent
-LOG_DIR = CLADS / "logs"
+# DPRASR 根目录（本脚本所在目录）
+DPRASR = Path(__file__).resolve().parent
+LOG_DIR = DPRASR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
 # 模型顺序与文件映射: (模型文件夹, busi文件, udiat文件, BUS_UCLM文件)
@@ -39,7 +39,7 @@ MODELS = [
   ("LVUnet",        "main.py", "udiat.py",          "BUS_UCLM.py"),
   ("MKUnet",        "main.py", "udiat.py",          "BUS_UCLM.py"),
   ("CMUNet",        "main.py", "udiat.py",          "BUS_UCLM.py"),
-  ("CLADSNet",      "main.py", "udiat.py",          "BUS_UCLM.py"),
+  ("DPRASRNet",      "main.py", "udiat.py",          "BUS_UCLM.py"),
 ("TransUNet",      "main.py", "udiat.py",          "BUS_UCLM.py"),
 
 ]
@@ -87,14 +87,14 @@ def run_one(model_name, script_name, stage_name, idx, total):
     """运行单个模型训练脚本。
     控制台实时显示输出，同时完整保存到 logs/*.log。
     """
-    model_dir = CLADS / model_name
+    model_dir = DPRASR / model_name
     script = model_dir / script_name
     log_path = LOG_DIR / f"{stage_name}_{model_name}.log"
 
     print(f"\n{'=' * 70}")
     print(f"▶ [{stage_name}] [{idx}/{total}] {model_name} -> {script_name}")
     print(f"  工作目录: {model_dir}")
-    print(f"  日志文件: {log_path.relative_to(CLADS)}")
+    print(f"  日志文件: {log_path.relative_to(DPRASR)}")
     print(f"{'=' * 70}")
     sys.stdout.flush()
 
@@ -105,7 +105,7 @@ def run_one(model_name, script_name, stage_name, idx, total):
         return {}, "脚本不存在"
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(CLADS) + os.pathsep + env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = str(DPRASR) + os.pathsep + env.get("PYTHONPATH", "")
     env["PYTHONIOENCODING"] = "utf-8"
 
     lines = []
@@ -155,7 +155,7 @@ def run_one(model_name, script_name, stage_name, idx, total):
 # 单阶段处理
 # -------------------------------------------------------------------
 def run_stage(stage_name, record_name, file_idx):
-    record_path = CLADS / record_name
+    record_path = DPRASR / record_name
     total = len(MODELS)
     results = []
 
@@ -217,7 +217,7 @@ def main():
         sys.exit(1)
 
     print(f"Python : {sys.executable}")
-    print(f"CLADS  : {CLADS}")
+    print(f"DPRASR  : {DPRASR}")
     print(f"日志   : {LOG_DIR}")
     print(f"阶段   : {[s[0] for s in stages]}")
     print(f"模型数 : {len(MODELS)} ({', '.join(m[0] for m in MODELS)})")
@@ -230,7 +230,7 @@ def main():
     print(f"\n{'=' * 70}")
     print("全部完成。记录文件：")
     for s in stages:
-        print(f"  {CLADS / s[1]}")
+        print(f"  {DPRASR / s[1]}")
     print(f"结束时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
