@@ -27,7 +27,7 @@ def set_seed(seed=42):
 
 
 # ==========================================
-# 1. 动态深度监督权重计算 (DSADDS)
+# 1. 动态深度监督权重计算 (dprcab)
 # ==========================================
 def calculate_ds_weight(dataset_size, N_min=160.0, N_max=780.0, W_min=0.15, W_max=0.45):
     mu = (N_min + N_max) / 2.0
@@ -293,14 +293,14 @@ def train_and_eval_variant(config, train_loader, val_loader, test_loader, device
     name = config['name']
     use_dprcab = config['use_dprcab']
     use_acssr = config['use_acssr']
-    use_dsadds = config['use_dsadds']
+
 
     print(f"\n" + "=" * 60)
     print(f"🚀 开始消融实验组: [{name}]")
-    print(f"⚙️ 配置: DPRCAB={use_dprcab} | ACSSR={use_acssr} | DSADDS={use_dsadds}")
+    print(f"⚙️ 配置: DPRCAB={use_dprcab} | ACSSR={use_acssr} ")
     print("=" * 60)
 
-    ds_weight = calculate_ds_weight(train_size) if use_dsadds else 0.0
+    ds_weight = calculate_ds_weight(train_size)
 
     model = DPRASR_Net_Ablation(embed_dim=256, use_dprcab=use_dprcab, use_acssr=use_acssr).to(device)
     criterion = HybridLoss()
@@ -326,16 +326,14 @@ def train_and_eval_variant(config, train_loader, val_loader, test_loader, device
             images, masks = images.to(device), masks.to(device)
             optimizer.zero_grad()
 
-            if use_dsadds:
-                out, out0, out1, out2, out3 = model(images)
-                loss_main = criterion(out, masks)
-                loss_aux = ds_weight * (
-                            criterion(out0, masks) + criterion(out1, masks) + criterion(out2, masks) + criterion(out3,
-                                                                                                                 masks))
-                loss = loss_main + loss_aux
-            else:
-                out = model(images)
-                loss = criterion(out, masks)
+
+            out, out0, out1, out2, out3 = model(images)
+            loss_main = criterion(out, masks)
+            loss_aux = ds_weight * (
+                        criterion(out0, masks) + criterion(out1, masks) + criterion(out2, masks) + criterion(out3,
+                                                                                                             masks))
+            loss = loss_main + loss_aux
+
 
             loss.backward()
             optimizer.step()
@@ -391,7 +389,7 @@ def train_and_eval_variant(config, train_loader, val_loader, test_loader, device
 # ==========================================
 def main():
     set_seed(42)
-    data_dir = r"../../data/UDIAT"  # 请修改为你的 UDIAT 数据集路径
+    data_dir =r"../../data/UDIAT_Dataset_B"   # 请修改为你的 UDIAT 数据集路径
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"🚀 Using device: {device} | 🧪 Running Ablation Study on UDIAT Dataset")
@@ -427,15 +425,14 @@ def main():
     # 采用 w/o 格式的消融配置 (符合顶级期刊习惯)
     # ==========================================
     ablation_configs = [
-        {"name": r"w/o DPRCAB \& ACSSR \& DSADDS", "use_dprcab": False, "use_acssr": False, "use_dsadds": False},
+        {"name": r"w/o DPRCAB \& ACSSR ", "use_acssr": False, "use_dprcab": False},
         # Baseline
-        {"name": r"w/o ACSSR \& DSADDS", "use_dprcab": True, "use_acssr": False, "use_dsadds": False},
+        {"name": r"w/o ACSSR ", "use_acssr": False, "use_dprcab": False},
         # Baseline + DPRCAB
-        {"name": r"w/o DPRCAB \& DSADDS", "use_dprcab": False, "use_acssr": True, "use_dsadds": False},
+        {"name": r"w/o DPRCAB ",  "use_acssr": True, "use_dprcab": False},
         # Baseline + ACSSR
-        {"name": r"w/o DSADDS", "use_dprcab": True, "use_acssr": True, "use_dsadds": False},
-        # Baseline + DPRCAB + ACSSR
-        {"name": r"DPRASR-Net (Ours)", "use_dprcab": True, "use_acssr": True, "use_dsadds": True},  # Full Model
+
+        {"name": r"DPRASR-Net (Ours)", "use_acssr": True, "use_dprcab": True},  # Full Model
     ]
 
     all_results = {}
