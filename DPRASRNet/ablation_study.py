@@ -313,7 +313,7 @@ def train_and_eval_variant(config, train_loader, val_loader, test_loader, device
     save_path = f"best_udiat_ablation_{safe_name}.pth"
 
     best_val_dice = 0.0
-    patience = 15
+    patience = 5
     no_improve_count = 0
 
     # ----- 训练阶段 -----
@@ -427,7 +427,7 @@ def main():
     ablation_configs = [
         {"name": r"w/o DPRCAB \& ACSSR ", "use_acssr": False, "use_dprcab": False},
         # Baseline
-        {"name": r"w/o ACSSR ", "use_acssr": False, "use_dprcab": False},
+        {"name": r"w/o ACSSR ", "use_acssr": False, "use_dprcab": True},
         # Baseline + DPRCAB
         {"name": r"w/o DPRCAB ",  "use_acssr": True, "use_dprcab": False},
         # Baseline + ACSSR
@@ -442,45 +442,50 @@ def main():
         all_results[config['name']] = res
 
     # ==========================================
-    # 生成直接可用的 LaTeX 代码 (自动加粗最值)
+    # 生成 LaTeX 代码并写入文件
     # ==========================================
-    print("\n\n" + "=" * 80)
-    print("📋 复制以下 LaTeX 代码到你的论文中 (Table 4):")
-    print("=" * 80 + "\n")
-
     metrics_keys = ["Dice", "IoU", "ACC", "Precision", "Recall"]
-
-    # 寻找每列的最大值，以便在输出中自动加粗
     best_vals = {m: max([res[m] for res in all_results.values()]) for m in metrics_keys}
 
-    print(
+    latex_lines = []
+    latex_lines.append(
         r"\textbf{Model Configuration} & \textbf{Dice} & \textbf{IoU} & \textbf{ACC} & \textbf{Precision} & \textbf{Recall} \\")
-    print(r"\midrule")
+    latex_lines.append(r"\midrule")
 
     for config in ablation_configs:
         name = config['name']
         res = all_results[name]
 
-        # 判断是否是最后一行 (Ours)，添加分割线并加粗名字
         if name == r"DPRASR-Net (Ours)":
-            print(r"\midrule")
+            latex_lines.append(r"\midrule")
             row_str = [r"\textbf{DPRASR-Net (Ours)}"]
         else:
             row_str = [name]
 
-        # 遍历指标进行格式化
         for m in metrics_keys:
             val = res[m]
-            # 如果当前值是最优值（考虑浮点误差），则加上 \textbf{}
             if abs(val - best_vals[m]) < 1e-6:
                 row_str.append(rf"\textbf{{{val:.4f}}}")
             else:
                 row_str.append(f"{val:.4f}")
 
-        # 拼接当前行并输出
-        print(" & ".join(row_str) + r" \\")
+        latex_lines.append(" & ".join(row_str) + r" \\")
 
+    # 1. 打印到控制台
+    print("\n\n" + "=" * 80)
+    print("📋 复制以下 LaTeX 代码到你的论文中 (Table 4):")
+    print("=" * 80 + "\n")
+    for line in latex_lines:
+        print(line)
     print("\n" + "=" * 80)
+
+    # 2. 写入到文件中
+    output_filename = "ablation_results.txt"
+    with open(output_filename, "w", encoding="utf-8") as f:
+        for line in latex_lines:
+            f.write(line + "\n")
+
+    print(f"💾 结果已成功保存至当前目录下的文件: {output_filename}")
 
 
 if __name__ == "__main__":
