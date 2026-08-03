@@ -13,7 +13,9 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from newNet.我做的最强busi模型 import DPRASR_Net
+from main import DPRASR_Net
+
+from DPRASRNet.main import calculate_ds_weight
 from seed.set_seed import set_seed
 
 from main import HybridLoss
@@ -119,21 +121,14 @@ def main():
         val_loader = DataLoader(
             UDIATDataset(all_imgs[t_size:t_size + v_size], all_masks[t_size:t_size + v_size], False), batch_size=8,
             shuffle=False)
-        # 🚀 修改 3：加载 BUSI 上的最佳 CMU-Net 权重进行微调
-        if os.path.exists(pretrained_busi_path):
-            print(f"🔄 正在加载 BUSI 预训练权重: {pretrained_busi_path}")
-            model.load_state_dict(torch.load(pretrained_busi_path, map_location=device))
-            print("✅ 预训练权重加载成功！开始基于 BUSI 先验知识进行微调 (Fine-tuning)。")
-        else:
-            print(f"⚠️ 警告: 未找到预训练权重 '{pretrained_busi_path}'，模型将从头初始化！")
-
+        dynamic_ds_weight = calculate_ds_weight(t_size)
         criterion = HybridLoss()
         optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)  # MLP 适合用 AdamW
         num_epochs = 200
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=35, eta_min=1e-6)
 
         best_val_dice = 0.0
-        patience = 10
+        patience = 5
         no_improve_count = 0
         for epoch in range(num_epochs):
             model.train()
@@ -146,14 +141,14 @@ def main():
                 # 新的输出结构
                 out, out0, out1, out2,out3 = model(images)
                 loss_main = criterion(out, masks)
-                loss_aux = (
-                        0.4 * criterion(out0, masks) +
-                        0.4 * criterion(out1, masks) +
-                        0.4 * criterion(out2, masks)+
-                        0.4 * criterion(out3, masks)
+                loss_aux = dynamic_ds_weight * (
+                      criterion(out0, masks) +
+                      criterion(out1, masks) +
+                      criterion(out2, masks) +
+                      criterion(out3, masks)
                 )
 
-                loss = loss_main + 0.4* loss_aux
+                loss = loss_main + loss_aux
 
                 loss.backward()
                 optimizer.step()

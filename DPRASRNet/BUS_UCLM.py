@@ -14,7 +14,7 @@ import torchvision.transforms.functional as TF
 from PIL import Image
 from tqdm import tqdm
 
-from main import DPRASR_Net
+from main import DPRASR_Net, calculate_ds_weight
 
 
 class HybridLoss(nn.Module):
@@ -141,6 +141,9 @@ def main():
         val_loader = DataLoader(
             BUSIDataset(all_imgs[train_size:train_size + val_size], all_masks[train_size:train_size + val_size], False),
             batch_size=8)
+        dynamic_ds_weight = calculate_ds_weight(train_size)
+        print(
+            f"🎯 DSADDS: Auto-adjusted Deep Supervision Weight = {dynamic_ds_weight:.4f} (Training Size = {train_size})")
 
         criterion = HybridLoss()
         optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)  # MLP 适合用 AdamW
@@ -148,7 +151,7 @@ def main():
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=35, eta_min=1e-6)
 
         best_val_dice = 0.0
-        patience = 10
+        patience = 5
         no_improve_count = 0
         for epoch in range(num_epochs):
             model.train()
@@ -161,14 +164,14 @@ def main():
                 # 新的输出结构
                 out, out0, out1, out2,out3 = model(images)
                 loss_main = criterion(out, masks)
-                loss_aux = (
-                        0.4 * criterion(out0, masks) +
-                        0.4 * criterion(out1, masks) +
-                        0.4 * criterion(out2, masks) +
-                        0.4 * criterion(out3, masks)
+                loss_aux = dynamic_ds_weight*(
+                        criterion(out0, masks) +
+                        criterion(out1, masks) +
+                        criterion(out2, masks) +
+                        criterion(out3, masks)
                 )
 
-                loss = loss_main +  0.4*loss_aux
+                loss = loss_main +  loss_aux
 
                 loss.backward()
                 optimizer.step()
