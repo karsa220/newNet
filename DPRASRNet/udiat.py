@@ -98,8 +98,6 @@ def main():
     save_path = "best_UDIAT.pth"
     # 🚀 修改 1：对应上一份脚本在 BUSI 上的最佳权重名
 
-
-    pretrained_busi_path = "0.pth"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"🚀 Device: {device} | ⚙️ Mode: {MODE}")
 
@@ -112,23 +110,27 @@ def main():
     all_imgs, all_masks = zip(*combined)
 
     total = len(all_imgs)
-    t_size, v_size = int(0.8 * total), int(0.1 * total)
+    train_size, v_size = int(0.8 * total), int(0.1 * total)
 
     model = DPRASR_Net().to(device)
 
     if MODE == "train":
-        train_loader = DataLoader(UDIATDataset(all_imgs[:t_size], all_masks[:t_size], True), batch_size=8, shuffle=True)
+        train_loader = DataLoader(UDIATDataset(all_imgs[:train_size], all_masks[:train_size], True), batch_size=8, shuffle=True)
         val_loader = DataLoader(
-            UDIATDataset(all_imgs[t_size:t_size + v_size], all_masks[t_size:t_size + v_size], False), batch_size=8,
+            UDIATDataset(all_imgs[train_size:train_size + v_size], all_masks[train_size:train_size + v_size], False), batch_size=8,
             shuffle=False)
-        dynamic_ds_weight = calculate_ds_weight(t_size)
+
+        dynamic_ds_weight = calculate_ds_weight(train_size)
+        print(
+            f"🎯 DSADDS: Auto-adjusted Deep Supervision Weight = {dynamic_ds_weight:.4f} (Training Size = {train_size})")
+
         criterion = HybridLoss()
         optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)  # MLP 适合用 AdamW
         num_epochs = 200
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=35, eta_min=1e-6)
 
         best_val_dice = 0.0
-        patience = 5
+        patience = 10
         no_improve_count = 0
         for epoch in range(num_epochs):
             model.train()
@@ -182,7 +184,7 @@ def main():
     print("\n" + "=" * 50)
     print("🚀 开始在完全未见的【测试集 (Test Set)】上评估最终性能...")
 
-    test_loader = DataLoader(UDIATDataset(all_imgs[t_size + v_size:], all_masks[t_size + v_size:], False),
+    test_loader = DataLoader(UDIATDataset(all_imgs[train_size + v_size:], all_masks[train_size + v_size:], False),
                              batch_size=1, shuffle=False)
 
     if not os.path.exists(save_path):

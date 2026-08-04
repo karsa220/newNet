@@ -142,7 +142,7 @@ def main():
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=35, eta_min=1e-6)
 
         best_val_dice = 0.0
-        patience = 5
+        patience = 10
         no_improve_count = 0
 
         for epoch in range(num_epochs):
