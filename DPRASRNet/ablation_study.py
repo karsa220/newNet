@@ -13,7 +13,7 @@ from torchvision import models
 import torchvision.transforms.functional as TF
 from PIL import Image
 from tqdm import tqdm
-
+from DPRASRNet.rcab_dprcab_comparison import RCAB
 
 # ==========================================
 # 1. 动态深度监督权重计算 (dprcab)
@@ -115,11 +115,11 @@ class ChannelAdapter(nn.Module):
 # 3. 支持消融配置的可调网络模型
 # ==========================================
 class DPRASR_Net_Ablation(nn.Module):
-    def __init__(self, embed_dim=256, use_dprcab=True, use_acssr=True):
+    def __init__(self, embed_dim=256, use_dprcab=True, use_acssr=True,use_rcab=False):
         super().__init__()
         self.use_dprcab = use_dprcab
         self.use_acssr = use_acssr
-
+        self.use_rcab = use_rcab
         densenet = models.densenet121(weights=models.DenseNet121_Weights.DEFAULT)
         self.encoder = densenet.features
 
@@ -129,7 +129,11 @@ class DPRASR_Net_Ablation(nn.Module):
             self.rcab1 = DPRCAB(self.ch2)
             self.rcab2 = DPRCAB(self.ch3)
             self.rcab3 = DPRCAB(self.ch4)
+        if self.use_rcab:
 
+            self.rcab1 = RCAB(self.ch2)
+            self.rcab2 = RCAB(self.ch3)
+            self.rcab3 = RCAB(self.ch4)
         self.linear0 = ChannelAdapter(self.ch0, embed_dim)
         self.linear1 = ChannelAdapter(self.ch2, embed_dim)
         self.linear2 = ChannelAdapter(self.ch3, embed_dim)
@@ -296,16 +300,16 @@ def train_and_eval_variant(config, train_loader, val_loader, test_loader, device
     name = config['name']
     use_dprcab = config['use_dprcab']
     use_acssr = config['use_acssr']
-
+    use_rcab = config['use_rcab']
 
     print(f"\n" + "=" * 60)
     print(f"🚀 开始消融实验组: [{name}]")
-    print(f"⚙️ 配置: DPRCAB={use_dprcab} | ACSSR={use_acssr} ")
+    print(f"⚙️ 配置: DPRCAB={use_dprcab} | ACSSR={use_acssr} | RCAB={use_rcab}")
     print("=" * 60)
 
     ds_weight = calculate_ds_weight(train_size)
 
-    model = DPRASR_Net_Ablation(embed_dim=256, use_dprcab=use_dprcab, use_acssr=use_acssr).to(device)
+    model = DPRASR_Net_Ablation(embed_dim=256, use_dprcab=use_dprcab, use_acssr=use_acssr,use_rcab=use_rcab).to(device)
     criterion = HybridLoss()
     optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
     num_epochs = 200
@@ -428,14 +432,14 @@ def main():
     # 采用 w/o 格式的消融配置 (符合顶级期刊习惯)
     # ==========================================
     ablation_configs = [
-        {"name": r"w/o DPRCAB \& ACSSR ", "use_acssr": False, "use_dprcab": False},
+       # {"name": r"w/o DPRCAB \& ACSSR ", "use_acssr": False, "use_dprcab": False,"use_rcab": False},
         # Baseline
-        {"name": r"w/o ACSSR ", "use_acssr": False, "use_dprcab": True},
+       # {"name": r"w/o ACSSR ", "use_acssr": False, "use_dprcab": True,"use_rcab": False},
         # Baseline + DPRCAB
-        {"name": r"w/o DPRCAB ",  "use_acssr": True, "use_dprcab": False},
+       # {"name": r"w/o DPRCAB ",  "use_acssr": True, "use_dprcab": False,"use_rcab": False},
         # Baseline + ACSSR
-
-        {"name": r"DPRASR-Net (Ours)", "use_acssr": True, "use_dprcab": True},  # Full Model
+        {"name": r"w/o DPRCAB use RCAB ", "use_acssr": True, "use_dprcab": False,"use_rcab": True},
+      #  {"name": r"DPRASR-Net (Ours)", "use_acssr": True, "use_dprcab": True,"use_rcab": False},  # Full Model
     ]
 
     all_results = {}
