@@ -19,11 +19,7 @@ from tqdm import tqdm
 # ==========================================
 import math
 
-
-# ==========================================
-# 创新点: 数据集规模感知的动态深度监督权重计算 (Logistic版)
-# ==========================================
-def calculate_ds_weight(dataset_size, N_min=160.0, N_max=780.0, W_min=0.15, W_max=0.45):
+def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0, W_min=0.15, W_max=0.45):
     """
     使用广义逻辑增长函数 (Logistic Function) 根据数据集大小计算深度监督权重。
     优势:

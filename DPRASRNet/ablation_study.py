@@ -1,3 +1,4 @@
+from seed.set_seed import set_seed
 import os
 import random
 import time
@@ -15,24 +16,26 @@ from tqdm import tqdm
 
 
 # ==========================================
-# 0. 固定随机种子
-# ==========================================
-def set_seed(seed=42):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-
-
-# ==========================================
 # 1. 动态深度监督权重计算 (dprcab)
 # ==========================================
-def calculate_ds_weight(dataset_size, N_min=160.0, N_max=780.0, W_min=0.15, W_max=0.45):
+def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0, W_min=0.15, W_max=0.45):
+    """
+    使用广义逻辑增长函数 (Logistic Function) 根据数据集大小计算深度监督权重。
+    优势:
+    1. 有界性: 无论 dataset_size 有多大多小，权重永远严格限制在 (W_min, W_max) 之间。
+    2. 平滑性: 过渡平滑，避免线性函数在边界处的突变。
+    """
+    # 1. 计算拐点 mu (即 N_min 和 N_max 的中点)
     mu = (N_min + N_max) / 2.0
+
+    # 2. 计算增长率 gamma
+    # 我们希望在 N_max 时，函数值达到上界的 95% 的过渡完成度
+    # 数学推导: 1 / (1 + exp(-gamma * (N_max - mu))) = 0.95  =>  gamma = ln(19) / (N_max - mu)
     gamma = math.log(19) / (N_max - mu)
+
+    # 3. 计算 Logistic 映射权重
     weight = W_min + (W_max - W_min) / (1.0 + math.exp(-gamma * (dataset_size - mu)))
+
     return weight
 
 
