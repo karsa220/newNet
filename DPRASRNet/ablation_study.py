@@ -320,7 +320,7 @@ def train_and_eval_variant(config, train_loader, val_loader, test_loader, device
     save_path = f"best_udiat_ablation_{safe_name}.pth"
 
     best_val_dice = 0.0
-    patience = 5
+    patience = 10
     no_improve_count = 0
 
     # ----- 训练阶段 -----
@@ -433,12 +433,12 @@ def main():
     # ==========================================
     ablation_configs = [
        # {"name": r"w/o DPRCAB \& ACSSR ", "use_acssr": False, "use_dprcab": False,"use_rcab": False},
-        # Baseline
-       # {"name": r"w/o ACSSR ", "use_acssr": False, "use_dprcab": True,"use_rcab": False},
-        # Baseline + DPRCAB
+
+    #  {"name": r"w/o ACSSR ", "use_acssr": False, "use_dprcab": True,"use_rcab": False},
+
        # {"name": r"w/o DPRCAB ",  "use_acssr": True, "use_dprcab": False,"use_rcab": False},
-        # Baseline + ACSSR
-        {"name": r"w/o DPRCAB use RCAB ", "use_acssr": True, "use_dprcab": False,"use_rcab": True},
+      {"name": r"w/o ACSSR use RCAB", "use_acssr": False, "use_dprcab": False, "use_rcab": True},
+      #  {"name": r"w/o DPRCAB", "use_acssr": True, "use_dprcab": False,"use_rcab": False},
       #  {"name": r"DPRASR-Net (Ours)", "use_acssr": True, "use_dprcab": True,"use_rcab": False},  # Full Model
     ]
 
