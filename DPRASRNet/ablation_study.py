@@ -432,14 +432,14 @@ def main():
     # 采用 w/o 格式的消融配置 (符合顶级期刊习惯)
     # ==========================================
     ablation_configs = [
-       # {"name": r"w/o DPRCAB \& ACSSR ", "use_acssr": False, "use_dprcab": False,"use_rcab": False},
+      {"name": r"w/o DPRCAB \& ACSSR ", "use_acssr": False, "use_dprcab": False,"use_rcab": False},
 
-    #  {"name": r"w/o ACSSR ", "use_acssr": False, "use_dprcab": True,"use_rcab": False},
+     {"name": r"w/o ACSSR ", "use_acssr": False, "use_dprcab": True,"use_rcab": False},
 
-       # {"name": r"w/o DPRCAB ",  "use_acssr": True, "use_dprcab": False,"use_rcab": False},
+        {"name": r"w/o DPRCAB ",  "use_acssr": True, "use_dprcab": False,"use_rcab": False},
       {"name": r"w/o ACSSR use RCAB", "use_acssr": False, "use_dprcab": False, "use_rcab": True},
-      #  {"name": r"w/o DPRCAB", "use_acssr": True, "use_dprcab": False,"use_rcab": False},
-      #  {"name": r"DPRASR-Net (Ours)", "use_acssr": True, "use_dprcab": True,"use_rcab": False},  # Full Model
+        {"name": r"w/o DPRCAB", "use_acssr": True, "use_dprcab": False,"use_rcab": False},
+        {"name": r"DPRASR-Net (Ours)", "use_acssr": True, "use_dprcab": True,"use_rcab": False},  # Full Model
     ]
 
     all_results = {}
