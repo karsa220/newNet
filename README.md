@@ -2,28 +2,36 @@
 
 ## Environment Setup
 
-```bash (Linux)
-# Python 3.12
+Open your terminal, navigate to the root directory of this cloned repository (inside the `DPRASR-Net` folder), and run the following commands:
+
+```bash
+# Ensure you are using Python 3.12
 pip install -r requirements.txt
+
+# Add the repository root to PYTHONPATH (Linux/macOS)
 export PYTHONPATH=$(pwd):$PYTHONPATH
 
 ```
 
-> On Windows (Command Prompt), replace `export PYTHONPATH=$(pwd):$PYTHONPATH` with:
+> **Windows Users (Command Prompt):** Replace the `export` command above with:
 > `set PYTHONPATH=%cd%;%PYTHONPATH%`
+> **Windows Users (PowerShell):**
+> `$env:PYTHONPATH = "$PWD;" + $env:PYTHONPATH`
 
 ## Datasets
 
-This project requires **3 public breast-ultrasound segmentation datasets**. The dataset root is hard-coded in the code as a **sibling `data` directory** of the repository (each model script uses `../../data/...`, and `visualize_comparison.py` also uses `(DPRASR / ".." / "data")`).
+This project requires **3 public breast-ultrasound segmentation datasets**. The dataset root path is strictly defined in the code to point to a **sibling `data` directory** (the scripts automatically look for `../data/` or `../../data/`).
 
-Therefore, create the `data` folder **next to** the `DPRASR-Net` folder. For example:
+You must create a `data` folder **next to** your cloned `DPRASR-Net` folder.
+
+Your directory structure should look exactly like this:
+
+```text
+Your_Workspace_Directory/
+├── DPRASR-Net/          <- This cloned repository
+└── data/                <- Create this folder here and place your datasets inside
 
 ```
-D:/PythonProjects/
-├── DPRASR-Net/          <- this repository
-└── data/               <- datasets go here (scripts automatically look in ../data)
-```
-
 ### Required Final Layout
 
 The exact structure the code expects when reading the data. **The folder names must match exactly**:
