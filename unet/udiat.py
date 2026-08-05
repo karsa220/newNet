@@ -96,8 +96,7 @@ def main():
     MODE = "train"  # "train" 训练(微调) | "test" 直接评估
     data_dir = r"../../data/UDIAT_Dataset_B"  # 你的 UDIAT 数据集根目录
 
-    # 🚀 修改 1：定义预训练权重和新权重的路径
-    pretrained_busi_path = "best_busi35_DISABLED.pth"  # 【从头训练】已禁用busi权重加载
+
     save_path = "best_UDIAT.pth"  # 微调后保存的新权重名，加了 finetuned 以示区分
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -116,13 +115,6 @@ def main():
     model = UNet().to(device)
 
     if MODE == "train":
-        # 🚀 修改 2：在开启训练前，加载 BUSI 的预训练权重
-        if os.path.exists(pretrained_busi_path):
-            print(f"🔄 正在加载 BUSI 预训练权重: {pretrained_busi_path}")
-            model.load_state_dict(torch.load(pretrained_busi_path, map_location=device))
-            print("✅ 预训练权重加载成功！开始基于 BUSI 先验知识进行微调 (Fine-tuning)。")
-        else:
-            print(f"⚠️ 警告: 未找到预训练权重 '{pretrained_busi_path}'，模型将从头开始训练！")
 
         train_loader = DataLoader(UDIATDataset(all_imgs[:t_size], all_masks[:t_size], True), batch_size=8, shuffle=True)
         val_loader = DataLoader(
