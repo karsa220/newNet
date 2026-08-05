@@ -2,10 +2,11 @@
 
 ## Environment Setup
 
-```bash
+```bash (Linux)
 # Python 3.12
 pip install -r requirements.txt
 export PYTHONPATH=$(pwd):$PYTHONPATH
+
 ```
 
 > On Windows (Command Prompt), replace `export PYTHONPATH=$(pwd):$PYTHONPATH` with:
@@ -18,7 +19,7 @@ This project requires **3 public breast-ultrasound segmentation datasets**. The 
 Therefore, create the `data` folder **next to** the `DPRASR-Net` folder. For example:
 
 ```
-D:/PycharmProjects/
+D:/PythonProjects/
 ├── DPRASR-Net/          <- this repository
 └── data/               <- datasets go here (scripts automatically look in ../data)
 ```
