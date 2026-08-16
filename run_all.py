@@ -39,7 +39,7 @@ MODELS = [
     ("MKUnet", "main.py", "udiat.py", "BUS_UCLM.py"),
     ("CMUNet", "main.py", "udiat.py", "BUS_UCLM.py"),
     ("DPRASRNet", "main.py", "udiat.py", "BUS_UCLM.py"),
-    ("TransUNet", "main.py", "udiat.py", "BUS_UCLM.py"),
+    ("transunet", "main.py", "udiat.py", "BUS_UCLM.py"),
 ]
 
 # Three stages: (stage name, record file name, file index 0=busi 1=udiat 2=BUS-UCLM)
