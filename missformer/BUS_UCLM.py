@@ -216,7 +216,7 @@ def main():
     # 4. Training mode (Train) - extremely fast convergence strategy for 35 Epoch
     # ==========================================
     if MODE == "train":
-        num_epochs = 1
+        num_epochs = 200
         best_val_dice = 0.0
         patience = 5
         no_improve_count = 0

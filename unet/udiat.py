@@ -153,7 +153,7 @@ def main():
         fine_tune_lr = 1e-4
         optimizer = optim.Adam(model.parameters(), lr=fine_tune_lr, weight_decay=1e-4)
 
-        num_epochs = 1
+        num_epochs = 200
         scheduler = optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=35, eta_min=1e-6
         )

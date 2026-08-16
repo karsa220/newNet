@@ -308,7 +308,7 @@ def main():
     # ==========================================
     if MODE == "train":
         optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
-        num_epochs = 1
+        num_epochs = 200
         scheduler = optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=35, eta_min=1e-6
         )
