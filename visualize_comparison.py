@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
-"""
-visualize_comparison.py
+"""visualize_comparison.py
 ============================================================
-生成多个模型在 2 个数据集上的分割黑白掩膜对比图。
-布局：4 行 × 11 列 (动态适配模型数量)
-  - 4 行：2 个数据集(BUSI/UDIAT)各取 2 张超声图
-  - 11 列：原图 | GT | DPRASRNet(绿色标题,我们的) | 8 个对比模型
+Generate segmentation black and white mask comparison images of multiple models on 2 data sets.
+Layout: 4 rows × 11 columns (number of dynamically adapted models)
+  - 4 rows: 2 ultrasound images from each of the 2 data sets (BUSI/UDIAT)
+  - 11 columns: original image | GT | DPRASRNet (green title, ours) | 8 comparison models
         (SegFormer / Swin-UNet / TransUNet / HiFormer / MISSFormer / MK-UNet / CMU-Net / UNet++)
 
-用法：
+Usage:
     python visualize_comparison.py
-    python visualize_comparison.py --n 3      # 每数据集取3张(则6行)
-    python visualize_comparison.py --seed 100 # 换一组随机图片
-    python visualize_comparison.py --out cmp.png
-"""
+    python visualize_comparison.py --n 3 # Take 3 images from each data set (then 6 rows)
+    python visualize_comparison.py --seed 100 # Change a group of random pictures
+    python visualize_comparison.py --out cmp.png"""
+
 import os
 import sys
 import random
@@ -29,10 +28,11 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 
-# ---------- 安全导入 set_seed ----------
+# ---------- Safe import set_seed ----------
 try:
     from seed.set_seed import set_seed
 except ImportError:
+
     def set_seed(seed=42):
         random.seed(seed)
         np.random.seed(seed)
@@ -40,15 +40,17 @@ except ImportError:
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)
 
-# ---------- 路径 ----------
+            # ---------- Path ----------
+
+
 DPRASR = Path(__file__).resolve().parent
 DATA = (DPRASR / ".." / "data").resolve()
 
-# 只将根目录加入 sys.path，避免子文件夹同名文件污染全局命名空间
+# Only add the root directory to sys.path to avoid files with the same name in subfolders from polluting the global namespace.
 if str(DPRASR) not in sys.path:
     sys.path.insert(0, str(DPRASR))
 
-# segformer 从 HuggingFace 下载 nvidia/mit-b0，走国内镜像
+    # segformer Download nvidia/mit-b0 from HuggingFace and use domestic mirroring
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -56,18 +58,17 @@ rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
 rcParams["axes.unicode_minus"] = False
 
 
-# ---------- 隔离导入上下文管理器 ----------
+# ---------- Isolated import context manager ----------
 @contextlib.contextmanager
 def model_import_context(model_dir_path):
-    """
-    临时切换工作目录并隔离 sys.path：
-    1. 防止多模型之间的 utils.py / config.py 相互冲突
-    2. 确保在 import 与 实例化 时，模型内部的相对路径（如 ./configs/）能够正确读取
+    """Temporarily switch working directories and isolate sys.path:
+    1. Prevent utils.py / config.py conflicts between multiple models
+    2. Ensure that the relative path inside the model (such as ./configs/) can be read correctly during import and instantiation.
     """
     old_cwd = os.getcwd()
     model_dir_str = str(model_dir_path)
 
-    # 临时把模型目录插到 sys.path 最前面
+    # Temporarily insert the model directory to the front of sys.path
     sys.path.insert(0, model_dir_str)
     if model_dir_path.exists():
         os.chdir(model_dir_str)
@@ -79,8 +80,9 @@ def model_import_context(model_dir_path):
         if model_dir_str in sys.path:
             sys.path.remove(model_dir_str)
 
+            # ----------Dataset configuration ----------
 
-# ---------- 数据集配置 ----------
+
 DATASETS = {
     "busi": {
         "root": DATA / "Dataset_BUSI_with_GT",
@@ -92,7 +94,7 @@ DATASETS = {
     },
 }
 
-# ---------- 模型配置（列顺序：DPRASRNet 第3列，其余8个对比）----------
+# ---------- Model configuration (column order: DPRASRNet column 3, the remaining 8 comparisons) ----------
 MODELS = [
     {"key": "DPRASRNet", "name": "DPRASR-Net", "ours": True, "dir": "DPRASRNet"},
     {"key": "segformer", "name": "SegFormer", "ours": False, "dir": "segformer"},
@@ -122,15 +124,16 @@ def weight_path(model_key, dataset):
 
 
 def get_size(model_key, dataset):
-    """各模型在各数据集训练时的输入尺寸"""
+    """The input size of each model when training on each data set"""
     if model_key in ("swinunet", "hiformer"):
         return 224
     if model_key == "missformer":
         return 256 if dataset == "udiat" else 224
     return 256
 
+    # ---------- Model loading (isolated import + directory error prevention) ----------
 
-# ---------- 模型加载（隔离导入 + 目录防错） ----------
+
 def load_model(model_key, weight_p, img_size=None):
     try:
         if model_key == "DPRASRNet":
@@ -138,9 +141,11 @@ def load_model(model_key, weight_p, img_size=None):
             with model_import_context(DPRASR_dir):
                 try:
                     from main import DPRASR_Net
+
                     model = DPRASR_Net(embed_dim=256)
                 except ImportError:
                     from main import DPRASR_Net
+
                     model = DPRASR_Net(embed_dim=256)
 
         elif model_key == "segformer":
@@ -149,11 +154,13 @@ def load_model(model_key, weight_p, img_size=None):
                     from segformer.main import SegFormerWrapper
                 except ImportError:
                     from main import SegFormerWrapper
-                model = SegFormerWrapper(pretrained_model="nvidia/mit-b0", num_classes=1)
+                model = SegFormerWrapper(
+                    pretrained_model="nvidia/mit-b0", num_classes=1
+                )
 
         elif model_key == "swinunet":
             with model_import_context(DPRASR / "swinunet"):
-                # 注意：必须在 chdir(swinunet) 之后 import，否则其内部读取 ./configs/ 会找不到文件
+                # Note: Import must be done after chdir(swinunet), otherwise the file will not be found when reading ./configs/ internally.
                 try:
                     from swinunet.main import OfficialSwinUNetWrapper
                 except ImportError:
@@ -164,20 +171,32 @@ def load_model(model_key, weight_p, img_size=None):
             with model_import_context(DPRASR / "transunet"):
                 try:
                     from transunet.main import TransUNetWrapper
+
                     model = TransUNetWrapper(img_size=img_size or 224, num_classes=1)
                 except ImportError:
                     try:
-                        from networks.vit_seg_modeling import VisionTransformer as ViT_seg
+                        from networks.vit_seg_modeling import (
+                            VisionTransformer as ViT_seg,
+                        )
                         from networks.vit_seg_modeling import CONFIGS
-                        config_vit = CONFIGS['R50-ViT-B_16']
+
+                        config_vit = CONFIGS["R50-ViT-B_16"]
                         config_vit.n_classes = 1
                         config_vit.n_skip = 3
                         if img_size:
-                            config_vit.patches.grid = (int(img_size / 16), int(img_size / 16))
-                        model = ViT_seg(config_vit, img_size=img_size or 224, num_classes=1)
+                            config_vit.patches.grid = (
+                                int(img_size / 16),
+                                int(img_size / 16),
+                            )
+                        model = ViT_seg(
+                            config_vit, img_size=img_size or 224, num_classes=1
+                        )
                     except ImportError:
                         from main import TransUNetWrapper
-                        model = TransUNetWrapper(img_size=img_size or 224, num_classes=1)
+
+                        model = TransUNetWrapper(
+                            img_size=img_size or 224, num_classes=1
+                        )
 
         elif model_key == "hiformer":
             with model_import_context(DPRASR / "hiformer"):
@@ -187,7 +206,12 @@ def load_model(model_key, weight_p, img_size=None):
                 except ImportError:
                     from models.HiFormer import HiFormer
                     from configs.HiFormer_configs import get_hiformer_b_configs
-                model = HiFormer(config=get_hiformer_b_configs(), img_size=224, in_chans=3, n_classes=1)
+                model = HiFormer(
+                    config=get_hiformer_b_configs(),
+                    img_size=224,
+                    in_chans=3,
+                    n_classes=1,
+                )
 
         elif model_key == "missformer":
             with model_import_context(DPRASR / "missformer"):
@@ -208,16 +232,18 @@ def load_model(model_key, weight_p, img_size=None):
         elif model_key == "CMUNet":
             with model_import_context(DPRASR / "CMUNet"):
                 from src.network.CMUNet import CMUNet
+
                 model = CMUNet(img_ch=3, output_ch=1, l=7, k=7)
 
         elif model_key == "unetplusplus":
             import segmentation_models_pytorch as smp
+
             model = smp.UnetPlusPlus(
                 encoder_name="resnet34",
                 encoder_weights=None,
                 in_channels=3,
                 classes=1,
-                activation="sigmoid"
+                activation="sigmoid",
             )
 
         else:
@@ -229,11 +255,12 @@ def load_model(model_key, weight_p, img_size=None):
         return model
 
     except Exception as e:
-        print(f"  [警告] 加载 {model_key} 失败({weight_p.name}): {e}")
+        print(f"[WARNING] Loading{model_key }fail({weight_p .name }): {e }")
         return None
 
+        # ---------- Preprocessing/Inference ----------
 
-# ---------- 预处理 / 推理 ----------
+
 def preprocess(img_pil, size):
     img = img_pil.convert("RGB").resize((size, size))
     t = TF.to_tensor(img)
@@ -246,14 +273,15 @@ def predict(model, model_key, img_tensor):
     if isinstance(out, (tuple, list)):
         out = out[0]
 
-    # 返回 raw logits 需手动 sigmoid 的模型
+        # Return raw logits to a model that requires manual sigmoid
     if model_key in ("hiformer", "MKUnet", "CMUNet", "transunet"):
         out = torch.sigmoid(out)
 
     return out
 
+    # ---------- Select picture ----------
 
-# ---------- 选图 ----------
+
 def collect_pairs(ds_cfg):
     root = ds_cfg["root"]
     kind = ds_cfg["kind"]
@@ -275,7 +303,11 @@ def collect_pairs(ds_cfg):
                 if f.lower().endswith((".png", ".jpg", ".jpeg")):
                     mp = gd / f
                     if not mp.exists():
-                        alt = f.replace(".png", ".PNG") if ".png" in f else f.replace(".PNG", ".png")
+                        alt = (
+                            f.replace(".png", ".PNG")
+                            if ".png" in f
+                            else f.replace(".PNG", ".png")
+                        )
                         if (gd / alt).exists():
                             mp = gd / alt
                     if mp.exists():
@@ -286,13 +318,14 @@ def collect_pairs(ds_cfg):
 def pick_pairs(ds_key, n=2, seed=42):
     pairs = collect_pairs(DATASETS[ds_key])
     if not pairs:
-        print(f"[警告] {ds_key} 未找到图片: {DATASETS[ds_key]['root']}")
+        print(f"[warn]{ds_key }No pictures found:{DATASETS [ds_key ]['root']}")
         return []
     random.Random(seed).shuffle(pairs)
     return pairs[:n]
 
+    # ---------- Drawing ----------
 
-# ---------- 画图 ----------
+
 def draw_grid(rows, out_path):
     n_rows = len(rows)
     n_cols = 2 + len(MODELS)
@@ -308,78 +341,115 @@ def draw_grid(rows, out_path):
             ax = axes[r][c]
             ax.axis("off")
             if r == 0:
-                ax.set_title(title, color="green" if is_ours else "black",
-                             fontsize=11, fontweight="bold" if is_ours else "normal")
+                ax.set_title(
+                    title,
+                    color="green" if is_ours else "black",
+                    fontsize=11,
+                    fontweight="bold" if is_ours else "normal",
+                )
 
     for r, row in enumerate(rows):
         img = row["img_pil"].convert("RGB").resize((256, 256))
         mask = row["mask_pil"].convert("L").resize((256, 256))
 
-        # 第1列 原图
+        # Column 1 original image
         axes[r][0].imshow(img)
-        axes[r][0].set_ylabel(f"{row['ds']}\n{row['img_name'][:18]}",
-                              fontsize=8, rotation=0, labelpad=40, va="center")
-        # 第2列 GT
+        axes[r][0].set_ylabel(
+            f"{row ['ds']}\n{row ['img_name'][:18 ]}",
+            fontsize=8,
+            rotation=0,
+            labelpad=40,
+            va="center",
+        )
+        # Column 2 GT
         axes[r][1].imshow(np.array(mask), cmap="gray")
 
-        # 后面列 模型预测
+        # The following columns model predictions
         for c, m in enumerate(MODELS, start=2):
             ax = axes[r][c]
             pred = row["preds"].get(m["key"])
             if pred is None:
                 ax.imshow(np.zeros((256, 256)), cmap="gray", vmin=0, vmax=1)
-                ax.text(0.5, 0.5, "N/A", ha="center", va="center",
-                        transform=ax.transAxes, color="red", fontsize=12, fontweight="bold")
+                ax.text(
+                    0.5,
+                    0.5,
+                    "N/A",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                    color="red",
+                    fontsize=12,
+                    fontweight="bold",
+                )
             else:
                 ax.imshow(pred, cmap="gray", vmin=0, vmax=1)
 
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"\n✅ 对比图已保存: {out_path}")
+    print(f"\n✅ The comparison chart has been saved:{out_path }")
+
+    # ---------- Main process ----------
 
 
-# ---------- 主流程 ----------
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--n", type=int, default=2, help="每个数据集取几张图(默认2)")
-    ap.add_argument("--out", type=str, default="comparison.png", help="输出文件名")
-    ap.add_argument("--seed", type=int, default=42, help="随机种子，改变数字可挑选不同图片")
+    ap.add_argument(
+        "--n",
+        type=int,
+        default=2,
+        help="How many pictures are taken from each data set (default 2)",
+    )
+    ap.add_argument(
+        "--out", type=str, default="comparison.png", help="Output file name"
+    )
+    ap.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed, change the number to select different pictures",
+    )
     args = ap.parse_args()
 
     set_seed(args.seed)
 
-    print(f"DEVICE: {DEVICE} | DPRASR: {DPRASR}")
-    print(f"DATA: {DATA} | 每数据集取 {args.n} 张 | 种子: {args.seed} | 输出: {args.out}")
+    print(f"DEVICE: {DEVICE } | DPRASR: {DPRASR }")
+    print(
+        f"DATA: {DATA }| Taken from each data set{args .n }Zhang | Seed:{args .seed }| Output:{args .out }"
+    )
 
-    # 1. 选图
+    # 1. Select pictures
     all_rows = []
     for ds_key in ["busi", "udiat"]:
         pairs = pick_pairs(ds_key, n=args.n, seed=args.seed)
         for img_p, mask_p in pairs:
-            all_rows.append({
-                "ds": ds_key,
-                "img_name": Path(img_p).name,
-                "img_pil": Image.open(img_p),
-                "mask_pil": Image.open(mask_p),
-                "ds_key": ds_key,
-                "preds": {},
-            })
-        print(f"  [{ds_key}] 选 {len(pairs)} 张")
+            all_rows.append(
+                {
+                    "ds": ds_key,
+                    "img_name": Path(img_p).name,
+                    "img_pil": Image.open(img_p),
+                    "mask_pil": Image.open(mask_p),
+                    "ds_key": ds_key,
+                    "preds": {},
+                }
+            )
+        print(f"  [{ds_key }] select{len (pairs )}open")
 
     if not all_rows:
-        print("❌ 未选到任何图片，检查数据路径。")
+        print("❌ No pictures were selected, check the data path.")
         return
 
-    # 2. 对每个模型：加载权重，推理
+        # 2. For each model: load weights, inference
     for m in MODELS:
-        print(f"\n=== 模型 {m['name']} ===")
+        print(f"\n=== Model{m ['name']} ===")
         for ds_key in ["busi", "udiat"]:
             wp = weight_path(m["key"], ds_key)
             if not wp.exists():
-                print(f"  [{ds_key}] 权重缺失: {wp.name}（该数据集此模型跳过，画 N/A）")
+                print(
+                    f"  [{ds_key }] Weight missing:{wp .name }(This data set is skipped by this model, and N/A is drawn)"
+                )
                 continue
-            print(f"  [{ds_key}] 加载权重: {wp.name}")
+            print(f"  [{ds_key }] Load weights:{wp .name }")
             size = get_size(m["key"], ds_key)
             model = load_model(m["key"], wp, img_size=size)
             if model is None:
@@ -400,7 +470,7 @@ def main():
             del model
             torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
-    # 3. 画图
+            # 3. Draw a picture
     draw_grid(all_rows, args.out)
 
 

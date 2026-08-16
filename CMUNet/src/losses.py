@@ -3,8 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-__all__ = ['BCEDiceLoss']
+__all__ = ["BCEDiceLoss"]
 
 
 class BCEDiceLoss(nn.Module):
@@ -18,7 +17,9 @@ class BCEDiceLoss(nn.Module):
         num = target.size(0)
         input = input.view(num, -1)
         target = target.view(num, -1)
-        intersection = (input * target)
-        dice = (2. * intersection.sum(1) + smooth) / (input.sum(1) + target.sum(1) + smooth)
+        intersection = input * target
+        dice = (2.0 * intersection.sum(1) + smooth) / (
+            input.sum(1) + target.sum(1) + smooth
+        )
         dice = 1 - dice.sum() / num
         return 0.5 * bce + dice

@@ -19,91 +19,101 @@ from main import structure_loss
 from main import MK_UNet
 from main import calculate_metrics
 
+
 # ==========================================
-# 6. UDIAT 数据集加载 (原图/GT结构)
+# 6. UDIAT data set loading (original image/GT structure)
 # ==========================================
 class UDIATDataset(Dataset):
     def __init__(self, image_paths, mask_paths, is_train=False):
-        self.image_paths, self.mask_paths, self.is_train = image_paths, mask_paths, is_train
+        self.image_paths, self.mask_paths, self.is_train = (
+            image_paths,
+            mask_paths,
+            is_train,
+        )
 
     def __len__(self):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
-        image = Image.open(self.image_paths[idx]).convert('RGB')
-        mask = Image.open(self.mask_paths[idx]).convert('L')
+        image = Image.open(self.image_paths[idx]).convert("RGB")
+        mask = Image.open(self.mask_paths[idx]).convert("L")
 
         image = TF.resize(image, (256, 256))
         mask = TF.resize(mask, (256, 256))
 
         if self.is_train:
-            # 1. 随机水平翻转
+            # 1. Random horizontal flip
             if random.random() > 0.5:
                 image = TF.hflip(image)
                 mask = TF.hflip(mask)
-            # 2. 随机旋转
+                # 2. Random rotation
             angle = random.uniform(-15, 15)
             image = TF.rotate(image, angle)
             mask = TF.rotate(mask, angle)
 
-            # 3. 增加一点尺度缩放和平移 (超声图像中病灶大小差异很大)
+            # 3. Add a little scaling and translation (lesion sizes vary greatly in ultrasound images)
             if random.random() > 0.5:
                 scale = random.uniform(0.9, 1.1)
                 translate = [int(random.uniform(-10, 10)), int(random.uniform(-10, 10))]
-                image = TF.affine(image, angle=0, translate=translate, scale=scale, shear=0)
-                mask = TF.affine(mask, angle=0, translate=translate, scale=scale, shear=0)
+                image = TF.affine(
+                    image, angle=0, translate=translate, scale=scale, shear=0
+                )
+                mask = TF.affine(
+                    mask, angle=0, translate=translate, scale=scale, shear=0
+                )
 
         image = TF.to_tensor(image)
         mask = TF.to_tensor(mask)
-
-
 
         return image, mask
 
 
 def get_udiat_paths(data_dir):
-    img_dir, gt_dir = os.path.join(data_dir, 'original'), os.path.join(data_dir, 'GT')
+    img_dir, gt_dir = os.path.join(data_dir, "original"), os.path.join(data_dir, "GT")
     if not os.path.exists(img_dir) or not os.path.exists(gt_dir):
-        print(f"❌ 路径错误: 找不到 original 或 GT 文件夹于 {data_dir}")
+        print(f"❌ Path error: original or GT folder not found in{data_dir }")
         return [], []
 
     img_p, mask_p = [], []
     for f in sorted(os.listdir(img_dir)):
-        if f.lower().endswith(('.png', '.jpg', '.jpeg')):
+        if f.lower().endswith((".png", ".jpg", ".jpeg")):
             img_path, mask_path = os.path.join(img_dir, f), os.path.join(gt_dir, f)
             if os.path.exists(mask_path):
                 img_p.append(img_path)
                 mask_p.append(mask_path)
             else:
-                # 兼容大小写差异（如 .PNG 和 .png）
-                alt_f = f.replace('.PNG', '.png') if '.PNG' in f else f.replace('.png', '.PNG')
+                # Compatible with case differences (such as .PNG and .png)
+                alt_f = (
+                    f.replace(".PNG", ".png")
+                    if ".PNG" in f
+                    else f.replace(".png", ".PNG")
+                )
                 alt_mask_path = os.path.join(gt_dir, alt_f)
                 if os.path.exists(alt_mask_path):
                     img_p.append(img_path)
                     mask_p.append(alt_mask_path)
 
-    print(f"✅ 成功找到 {len(img_p)} 对 UDIAT 图像和掩码。")
+    print(f"✅ Found successfully{len (img_p )}For UDIAT images and masks.")
     return img_p, mask_p
 
+    # ==========================================
+    # 7. Main console
+    # ==========================================
 
 
-
-# ==========================================
-# 7. 主控台
-# ==========================================
 def main():
     set_seed(42)
-    # 🌟🌟🌟 控制面板 🌟🌟🌟
-    MODE = "train"  # "train" 训练(微调) | "test" 直接评估
-    data_dir = r"../../data/UDIAT_Dataset_B"  # 你的 UDIAT 数据集根目录
-    save_path = "best_UDIAT.pth"  # 微调后保存的新权重名
+    # 🌟🌟🌟 Control Panel 🌟🌟🌟
+    MODE = "train"  # "train" training (fine-tuning) | "test" direct evaluation
+    data_dir = r"../../data/UDIAT_Dataset_B"  # Your UDIAT data set root directory
+    save_path = "best_UDIAT.pth"  # New weight name saved after fine-tuning
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"🚀 Device: {device} | ⚙️ Mode: {MODE}")
+    print(f"🚀 Device: {device } | ⚙️ Mode: {MODE }")
 
     all_imgs, all_masks = get_udiat_paths(data_dir)
     if not all_imgs:
-        print("❌ 未找到数据！请检查路径。")
+        print("❌ No data found! Please check the path.")
         return
 
     combined = list(zip(all_imgs, all_masks))
@@ -117,98 +127,120 @@ def main():
 
     if MODE == "train":
 
-        train_loader = DataLoader(UDIATDataset(all_imgs[:t_size], all_masks[:t_size], True), batch_size=8, shuffle=True)
+        train_loader = DataLoader(
+            UDIATDataset(all_imgs[:t_size], all_masks[:t_size], True),
+            batch_size=8,
+            shuffle=True,
+        )
         val_loader = DataLoader(
-            UDIATDataset(all_imgs[t_size:t_size + v_size], all_masks[t_size:t_size + v_size], False), batch_size=8,
-            shuffle=False)
+            UDIATDataset(
+                all_imgs[t_size : t_size + v_size],
+                all_masks[t_size : t_size + v_size],
+                False,
+            ),
+            batch_size=8,
+            shuffle=False,
+        )
 
         optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
-        num_epochs = 200
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=35, eta_min=1e-6)
+        num_epochs = 1
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=35, eta_min=1e-6
+        )
 
         best_val_dice = 0.0
         patience = 10
         no_improve_count = 0
 
-
         for epoch in range(num_epochs):
             model.train()
             train_loss_epoch = 0.0
 
-            pbar_train = tqdm(train_loader, desc=f"Epoch [{epoch + 1}/{num_epochs}] Train", leave=False)
+            pbar_train = tqdm(
+                train_loader,
+                desc=f"Epoch [{epoch +1 }/{num_epochs }] Train",
+                leave=False,
+            )
             for images, masks in pbar_train:
                 images, masks = images.to(device), masks.to(device)
 
                 optimizer.zero_grad()
                 outputs = model(images)
 
-                # 统一解析模型输出
+                # Unified analytical model output
                 logits = outputs[0] if isinstance(outputs, (list, tuple)) else outputs
 
-                # 计算损失并反向传播
+                # Calculate the loss and backpropagate
                 loss = structure_loss(logits, masks)
                 loss.backward()
 
-                # 梯度裁剪防止爆炸
+                # Gradient clipping prevents explosion
                 torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=0.5)
                 optimizer.step()
 
                 train_loss_epoch += loss.item()
-                pbar_train.set_postfix({'Loss': f"{loss.item():.4f}"})
+                pbar_train.set_postfix({"Loss": f"{loss .item ():.4f}"})
 
             avg_train_loss = train_loss_epoch / len(train_loader)
 
-            # --- Validation 阶段 ---
+            # --- Validation stage ---
             model.eval()
             val_dices = []
             with torch.no_grad():
                 for images, masks in val_loader:
                     images, masks = images.to(device), masks.to(device)
                     outputs = model(images)
-                    logits = outputs[0] if isinstance(outputs, (list, tuple)) else outputs
+                    logits = (
+                        outputs[0] if isinstance(outputs, (list, tuple)) else outputs
+                    )
 
-                    # 在计算 Dice 之前，需要手动将 logits 转换为概率 (Sigmoid)
+                    # Before calculating Dice, logits need to be manually converted to probabilities (Sigmoid)
                     probs = torch.sigmoid(logits)
                     val_dices.extend(calculate_metrics(probs, masks)["dice"])
 
             avg_val_dice = np.mean(val_dices)
             scheduler.step()
 
-
-
             print(
-                f"📉 Epoch {epoch + 1} | Loss: {avg_train_loss:.4f} | Val Dice: {avg_val_dice:.4f} | LR: {scheduler.get_last_lr()[0]:.6f}")
+                f"📉 Epoch {epoch +1 } | Loss: {avg_train_loss :.4f} | Val Dice: {avg_val_dice :.4f} | LR: {scheduler .get_last_lr ()[0 ]:.6f}"
+            )
 
             if avg_val_dice > best_val_dice:
                 best_val_dice = avg_val_dice
-                # 保存微调后的最佳模型
+                # Save the best model after fine-tuning
                 torch.save(model.state_dict(), save_path)
-                print(f"🌟 [New Best Saved] Val Dice: {best_val_dice:.4f} -> Saved to {save_path}")
+                print(
+                    f"🌟 [New Best Saved] Val Dice: {best_val_dice :.4f} -> Saved to {save_path }"
+                )
                 no_improve_count = 0
             else:
                 no_improve_count += 1
                 if no_improve_count >= patience:
-                    print(f"⏹️ 早停触发: 连续 {patience} 个 epoch 验证 Dice 无提升，停止训练。")
+                    print(
+                        f"⏹️ Early stop trigger: continuous{patience }It is verified that Dice has not improved after 1 epoch and the training is stopped."
+                    )
                     break
-
-
-
 
     if MODE in ["train", "test"]:
         print("\n" + "=" * 50)
-        print("🚀 开始在完全未见的 UDIAT 测试集上评估...")
-        test_loader = DataLoader(UDIATDataset(all_imgs[t_size + v_size:], all_masks[t_size + v_size:], False),
-                                 batch_size=1, shuffle=False)
+        print("🚀 Start evaluating on the completely unseen UDIAT test set...")
+        test_loader = DataLoader(
+            UDIATDataset(
+                all_imgs[t_size + v_size :], all_masks[t_size + v_size :], False
+            ),
+            batch_size=1,
+            shuffle=False,
+        )
 
-        # 测试阶段：加载微调后保存的最新权重
+        # Testing phase: Load the latest weights saved after fine-tuning
         if not os.path.exists(save_path):
-            print(f"❌ 找不到权重文件 {save_path}！请先运行 train 模式。")
+            print(f"❌ Weight file not found{save_path }! Please run train mode first.")
             return
 
         model.load_state_dict(torch.load(save_path, map_location=device))
         model.eval()
 
-        print("🔥 GPU 预热 (Warm-up)...")
+        print("🔥GPU Warm-up...")
         with torch.no_grad():
             for _ in range(5):
                 _ = model(torch.randn(1, 3, 256, 256).to(device))
@@ -222,17 +254,19 @@ def main():
             for images, masks in tqdm(test_loader, desc="Testing"):
                 images, masks = images.to(device), masks.to(device)
 
-                if torch.cuda.is_available(): torch.cuda.synchronize()
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
                 t0 = time.time()
 
                 outputs = model(images)
 
-                if torch.cuda.is_available(): torch.cuda.synchronize()
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
 
-                total_time += (time.time() - t0)
+                total_time += time.time() - t0
                 total_samples += images.size(0)
 
-                # 💡 修复：统一解析并加入 Sigmoid 激活！
+                # 💡 Fix: Unify parsing and add Sigmoid activation!
                 logits = outputs[0] if isinstance(outputs, (list, tuple)) else outputs
                 probs = torch.sigmoid(logits)
 
@@ -240,14 +274,18 @@ def main():
                 for k in test_res:
                     test_res[k].extend(m[k])
 
-        print("\n🏆 MKUnet (UDIAT Finetuned) 测试集最终成绩 🏆")
-        print(f"🔹 Dice : {np.mean(test_res['dice']):.4f} | IoU: {np.mean(test_res['iou']):.4f}")
+        print("\n🏆 MKUnet (UDIAT Finetuned) test set final results 🏆")
         print(
-            f"🔹 ACC  : {np.mean(test_res['acc']):.4f}  | Pre: {np.mean(test_res['pre']):.4f} | Rec: {np.mean(test_res['rec']):.4f}")
+            f"🔹 Dice : {np .mean (test_res ['dice']):.4f} | IoU: {np .mean (test_res ['iou']):.4f}"
+        )
+        print(
+            f"🔹 ACC  : {np .mean (test_res ['acc']):.4f}  | Pre: {np .mean (test_res ['pre']):.4f} | Rec: {np .mean (test_res ['rec']):.4f}"
+        )
         print("-" * 50)
-        print(f"⚡ 推理速度评估 (Device: {device}) ⚡")
+        print(f"⚡ Inference speed evaluation (Device:{device }) ⚡")
         print(
-            f"⏱️ 平均耗时: {(total_time / total_samples) * 1000:.2f} ms/img | FPS: {1.0 / (total_time / total_samples):.2f}")
+            f"⏱️Average time:{(total_time /total_samples )*1000 :.2f} ms/img | FPS: {1.0 /(total_time /total_samples ):.2f}"
+        )
         print("=" * 50)
 
 

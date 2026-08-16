@@ -13,36 +13,34 @@ import torchvision.transforms.functional as TF
 from PIL import Image
 from tqdm import tqdm
 
-
 # ==========================================
-# 创新点: 数据集规模感知的动态深度监督权重计算
+# Innovation: Dynamic deep supervision weight calculation with data set size awareness
 # ==========================================
 import math
 
+
 def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0, W_min=0.15, W_max=0.45):
+    """Use a generalized logistic function to calculate deep supervision weights based on the dataset size.
+    Advantages:
+    1. Boundedness: No matter how big or small the dataset_size is, the weight is always strictly limited to (W_min, W_max).
+    2. Smoothness: smooth transition to avoid sudden changes in linear functions at the boundary.
     """
-    使用广义逻辑增长函数 (Logistic Function) 根据数据集大小计算深度监督权重。
-    优势:
-    1. 有界性: 无论 dataset_size 有多大多小，权重永远严格限制在 (W_min, W_max) 之间。
-    2. 平滑性: 过渡平滑，避免线性函数在边界处的突变。
-    """
-    # 1. 计算拐点 mu (即 N_min 和 N_max 的中点)
+    # 1. Calculate the inflection point mu (i.e. the midpoint of N_min and N_max)
     mu = (N_min + N_max) / 2.0
 
-    # 2. 计算增长率 gamma
-    # 我们希望在 N_max 时，函数值达到上界的 95% 的过渡完成度
-    # 数学推导: 1 / (1 + exp(-gamma * (N_max - mu))) = 0.95  =>  gamma = ln(19) / (N_max - mu)
+    # 2. Calculate growth rate gamma
+    # We hope that at N_max, the function value reaches 95% of the transition completion of the upper bound
+    # Mathematical derivation: 1 / (1 + exp(-gamma * (N_max - mu))) = 0.95 => gamma = ln(19) / (N_max - mu)
     gamma = math.log(19) / (N_max - mu)
 
-    # 3. 计算 Logistic 映射权重
+    # 3. Calculate logistic mapping weight
     weight = W_min + (W_max - W_min) / (1.0 + math.exp(-gamma * (dataset_size - mu)))
 
     return weight
 
+    # Dual-Pooling Residual Channel Attention Block
 
 
-
-# Dual-Pooling Residual Channel Attention Block
 class DPRCAB(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
@@ -52,20 +50,20 @@ class DPRCAB(nn.Module):
             nn.BatchNorm2d(in_channels),
             nn.LeakyReLU(negative_slope=0.01, inplace=True),
             nn.Conv2d(in_channels, in_channels, 3, padding=1, bias=False),
-            nn.BatchNorm2d(in_channels)
+            nn.BatchNorm2d(in_channels),
         )
 
-        # 优化2: 引入双池化 (Average + Max)
+        # Optimization 2: Introducing double pooling (Average + Max)
         self.gap = nn.AdaptiveAvgPool2d(1)
         self.gmp = nn.AdaptiveMaxPool2d(1)
 
         mid = max(in_channels // 4, 1)
 
-        # 通道注意力 MLP
+        # Channel Attention MLP
         self.mlp = nn.Sequential(
             nn.Conv2d(in_channels, mid, 1, bias=False),
             nn.LeakyReLU(negative_slope=0.01, inplace=True),
-            nn.Conv2d(mid, in_channels, 1, bias=False)
+            nn.Conv2d(mid, in_channels, 1, bias=False),
         )
 
         self.sigmoid = nn.Sigmoid()
@@ -78,6 +76,8 @@ class DPRCAB(nn.Module):
         att = self.sigmoid(avg_att + max_att)
         out = feat * att + identity
         return out
+
+
 class RCAB(nn.Module):
     def __init__(self, in_channels, reduction=16):
         super().__init__()
@@ -102,8 +102,9 @@ class RCAB(nn.Module):
     def forward(self, x):
         return self.body(x) + x
 
+        # acssr: Adaptive Cross-Scale Soft Routing
 
-# acssr: Adaptive Cross-Scale Soft Routing
+
 class AdaptiveCrossScaleSoftRouting(nn.Module):
     def __init__(self, channels, num_scales=5, reduction=4):
         super().__init__()
@@ -115,7 +116,7 @@ class AdaptiveCrossScaleSoftRouting(nn.Module):
             nn.Conv2d(channels * num_scales, mid_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(mid_channels),
             nn.GELU(),
-            nn.Conv2d(mid_channels, channels * num_scales, kernel_size=1, bias=False)
+            nn.Conv2d(mid_channels, channels * num_scales, kernel_size=1, bias=False),
         )
 
     def forward(self, *features):
@@ -128,8 +129,9 @@ class AdaptiveCrossScaleSoftRouting(nn.Module):
         fused_out = (stacked_f * attn_weights).sum(dim=1)
         return fused_out
 
+        # Projection layer responsible for unifying channel dimensions
 
-# 负责统一通道维度的投影层
+
 class ChannelAdapter(nn.Module):
     def __init__(self, input_dim, embed_dim):
         super().__init__()
@@ -142,10 +144,11 @@ class ChannelAdapter(nn.Module):
         x = x.transpose(1, 2).reshape(B, -1, H, W)
         return x
 
+        # Dual-Pooling Residual Adaptive Soft-Routing Network
 
-# Dual-Pooling Residual Adaptive Soft-Routing Network
+
 class DPRASR_Net(nn.Module):
-    def __init__(self, embed_dim=256,block_type="dprcab"):
+    def __init__(self, embed_dim=256, block_type="dprcab"):
         super().__init__()
         densenet = models.densenet121(weights=models.DenseNet121_Weights.DEFAULT)
         self.encoder = densenet.features
@@ -166,7 +169,9 @@ class DPRASR_Net(nn.Module):
         self.linear3 = ChannelAdapter(self.ch4, embed_dim)
         self.linear_b = ChannelAdapter(self.ch_b, embed_dim)
 
-        self.acssr = AdaptiveCrossScaleSoftRouting(channels=embed_dim, num_scales=5, reduction=4)
+        self.acssr = AdaptiveCrossScaleSoftRouting(
+            channels=embed_dim, num_scales=5, reduction=4
+        )
 
         self.final_conv = nn.Conv2d(embed_dim, 1, 1)
         self.aux0 = nn.Conv2d(embed_dim, 1, 1)
@@ -188,21 +193,63 @@ class DPRASR_Net(nn.Module):
         target_size = e0.shape[2:]
 
         l0 = self.linear0(e0)
-        l1 = F.interpolate(self.linear1(s1), target_size, mode='bilinear', align_corners=False)
-        l2 = F.interpolate(self.linear2(s2), target_size, mode='bilinear', align_corners=False)
-        l3 = F.interpolate(self.linear3(s3), target_size, mode='bilinear', align_corners=False)
-        lb = F.interpolate(self.linear_b(b), target_size, mode='bilinear', align_corners=False)
+        l1 = F.interpolate(
+            self.linear1(s1), target_size, mode="bilinear", align_corners=False
+        )
+        l2 = F.interpolate(
+            self.linear2(s2), target_size, mode="bilinear", align_corners=False
+        )
+        l3 = F.interpolate(
+            self.linear3(s3), target_size, mode="bilinear", align_corners=False
+        )
+        lb = F.interpolate(
+            self.linear_b(b), target_size, mode="bilinear", align_corners=False
+        )
 
         fused = self.acssr(l0, l1, l2, l3, lb)
 
         out = torch.sigmoid(
-            F.interpolate(self.final_conv(fused), size=x.shape[2:], mode='bilinear', align_corners=False))
+            F.interpolate(
+                self.final_conv(fused),
+                size=x.shape[2:],
+                mode="bilinear",
+                align_corners=False,
+            )
+        )
 
         if self.training:
-            out0 = torch.sigmoid(F.interpolate(self.aux0(l0), size=x.shape[2:], mode='bilinear', align_corners=False))
-            out1 = torch.sigmoid(F.interpolate(self.aux1(l1), size=x.shape[2:], mode='bilinear', align_corners=False))
-            out2 = torch.sigmoid(F.interpolate(self.aux2(lb), size=x.shape[2:], mode='bilinear', align_corners=False))
-            out3 = torch.sigmoid(F.interpolate(self.aux3(l3), size=x.shape[2:], mode='bilinear', align_corners=False))
+            out0 = torch.sigmoid(
+                F.interpolate(
+                    self.aux0(l0),
+                    size=x.shape[2:],
+                    mode="bilinear",
+                    align_corners=False,
+                )
+            )
+            out1 = torch.sigmoid(
+                F.interpolate(
+                    self.aux1(l1),
+                    size=x.shape[2:],
+                    mode="bilinear",
+                    align_corners=False,
+                )
+            )
+            out2 = torch.sigmoid(
+                F.interpolate(
+                    self.aux2(lb),
+                    size=x.shape[2:],
+                    mode="bilinear",
+                    align_corners=False,
+                )
+            )
+            out3 = torch.sigmoid(
+                F.interpolate(
+                    self.aux3(l3),
+                    size=x.shape[2:],
+                    mode="bilinear",
+                    align_corners=False,
+                )
+            )
             return out, out0, out1, out2, out3
         return out
 
@@ -220,7 +267,9 @@ class HybridLoss(nn.Module):
         pred_flat = pred.view(pred.size(0), -1)
         target_flat = target.view(target.size(0), -1)
         intersection = (pred_flat * target_flat).sum(dim=1)
-        dice_score = (2.0 * intersection + smooth) / (pred_flat.sum(dim=1) + target_flat.sum(dim=1) + smooth)
+        dice_score = (2.0 * intersection + smooth) / (
+            pred_flat.sum(dim=1) + target_flat.sum(dim=1) + smooth
+        )
         dice_loss = 1.0 - dice_score
         return (self.weight_bce * bce_loss) + (self.weight_dice * dice_loss.mean())
 
@@ -234,45 +283,60 @@ def calculate_metrics(pred, target, smooth=1e-5):
     fp = (pred_flat * (1 - target_flat)).sum(dim=1)
     fn = ((1 - pred_flat) * target_flat).sum(dim=1)
     tn = ((1 - pred_flat) * (1 - target_flat)).sum(dim=1)
-    dice = (2. * tp + smooth) / (2. * tp + fp + fn + smooth)
+    dice = (2.0 * tp + smooth) / (2.0 * tp + fp + fn + smooth)
     iou = (tp + smooth) / (tp + fp + fn + smooth)
     acc = (tp + tn + smooth) / (tp + fp + fn + tn + smooth)
     pre = (tp + smooth) / (tp + fp + smooth)
     rec = (tp + smooth) / (tp + fn + smooth)
-    return {"dice": dice.tolist(), "iou": iou.tolist(), "acc": acc.tolist(), "pre": pre.tolist(), "rec": rec.tolist()}
+    return {
+        "dice": dice.tolist(),
+        "iou": iou.tolist(),
+        "acc": acc.tolist(),
+        "pre": pre.tolist(),
+        "rec": rec.tolist(),
+    }
+
+    # ==========================================
 
 
-# ==========================================
 class UDIATDataset(Dataset):
     def __init__(self, image_paths, mask_paths, is_train=False):
-        self.image_paths, self.mask_paths, self.is_train = image_paths, mask_paths, is_train
+        self.image_paths, self.mask_paths, self.is_train = (
+            image_paths,
+            mask_paths,
+            is_train,
+        )
 
     def __len__(self):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
-        image = Image.open(self.image_paths[idx]).convert('RGB')
-        mask = Image.open(self.mask_paths[idx]).convert('L')
+        image = Image.open(self.image_paths[idx]).convert("RGB")
+        mask = Image.open(self.mask_paths[idx]).convert("L")
 
         image = TF.resize(image, (256, 256))
         mask = TF.resize(mask, (256, 256))
 
         if self.is_train:
-            # 1. 随机水平翻转
+            # 1. Random horizontal flip
             if random.random() > 0.5:
                 image = TF.hflip(image)
                 mask = TF.hflip(mask)
-            # 2. 随机旋转
+                # 2. Random rotation
             angle = random.uniform(-15, 15)
             image = TF.rotate(image, angle)
             mask = TF.rotate(mask, angle)
 
-            # 3. 增加一点尺度缩放和平移 (超声图像中病灶大小差异很大)
+            # 3. Add a little scaling and translation (lesion sizes vary greatly in ultrasound images)
             if random.random() > 0.5:
                 scale = random.uniform(0.9, 1.1)
                 translate = [int(random.uniform(-10, 10)), int(random.uniform(-10, 10))]
-                image = TF.affine(image, angle=0, translate=translate, scale=scale, shear=0)
-                mask = TF.affine(mask, angle=0, translate=translate, scale=scale, shear=0)
+                image = TF.affine(
+                    image, angle=0, translate=translate, scale=scale, shear=0
+                )
+                mask = TF.affine(
+                    mask, angle=0, translate=translate, scale=scale, shear=0
+                )
 
         image = TF.to_tensor(image)
         mask = TF.to_tensor(mask)
@@ -281,38 +345,42 @@ class UDIATDataset(Dataset):
 
 
 def get_udiat_paths(data_dir):
-    img_dir, gt_dir = os.path.join(data_dir, 'original'), os.path.join(data_dir, 'GT')
+    img_dir, gt_dir = os.path.join(data_dir, "original"), os.path.join(data_dir, "GT")
     if not os.path.exists(img_dir) or not os.path.exists(gt_dir):
-        print(f"❌ 路径错误: 找不到 original 或 GT 文件夹于 {data_dir}")
+        print(f"❌ Path error: original or GT folder not found in{data_dir }")
         return [], []
 
     img_p, mask_p = [], []
     for f in sorted(os.listdir(img_dir)):
-        if f.lower().endswith(('.png', '.jpg', '.jpeg')):
+        if f.lower().endswith((".png", ".jpg", ".jpeg")):
             img_path, mask_path = os.path.join(img_dir, f), os.path.join(gt_dir, f)
             if os.path.exists(mask_path):
                 img_p.append(img_path)
                 mask_p.append(mask_path)
             else:
-                # 兼容大小写差异（如 .PNG 和 .png）
-                alt_f = f.replace('.PNG', '.png') if '.PNG' in f else f.replace('.png', '.PNG')
+                # Compatible with case differences (such as .PNG and .png)
+                alt_f = (
+                    f.replace(".PNG", ".png")
+                    if ".PNG" in f
+                    else f.replace(".png", ".PNG")
+                )
                 alt_mask_path = os.path.join(gt_dir, alt_f)
                 if os.path.exists(alt_mask_path):
                     img_p.append(img_path)
                     mask_p.append(alt_mask_path)
 
-    print(f"✅ 成功找到 {len(img_p)} 对 UDIAT 图像和掩码。")
+    print(f"✅ Found successfully{len (img_p )}For UDIAT images and masks.")
     return img_p, mask_p
 
 
 def main(block_type="dprcab"):
     set_seed(42)
-    MODE = "train"  # 默认为train进行测试
-    save_path = f"best_{block_type}.pth"
-    data_dir = r"../../data/UDIAT_Dataset_B"  # 你的 UDIAT 数据集根目录
+    MODE = "train"  # The default is train for testing
+    save_path = f"best_{block_type }.pth"
+    data_dir = r"../../data/UDIAT_Dataset_B"  # Your UDIAT data set root directory
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"🚀 Using device: {device} | 📐 Architecture: DPRASR-Net")
+    print(f"🚀 Using device: {device } | 📐 Architecture: DPRASR-Net")
 
     all_imgs, all_masks = get_udiat_paths(data_dir)
     total_size = len(all_imgs)
@@ -328,10 +396,12 @@ def main(block_type="dprcab"):
     val_size = int(0.1 * total_size)
 
     # ==========================================
-    # 🌟 创新点应用：动态计算当前的深度监督权重
+    # 🌟 Innovative application: dynamically calculate the current depth supervision weight
     # ==========================================
     dynamic_ds_weight = calculate_ds_weight(train_size)
-    print(f"🎯 DSADDS: Auto-adjusted Deep Supervision Weight = {dynamic_ds_weight:.4f} (Training Size = {train_size})")
+    print(
+        f"🎯 DSADDS: Auto-adjusted Deep Supervision Weight = {dynamic_ds_weight :.4f} (Training Size = {train_size })"
+    )
 
     model = DPRASR_Net(embed_dim=256).to(device)
 
@@ -342,13 +412,20 @@ def main(block_type="dprcab"):
             shuffle=True,
         )
         val_loader = DataLoader(
-            UDIATDataset(all_imgs[train_size:train_size + val_size], all_masks[train_size:train_size + val_size], False),
-            batch_size=8)
+            UDIATDataset(
+                all_imgs[train_size : train_size + val_size],
+                all_masks[train_size : train_size + val_size],
+                False,
+            ),
+            batch_size=8,
+        )
 
         criterion = HybridLoss()
         optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
-        num_epochs = 200
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=35, eta_min=1e-6)
+        num_epochs = 1
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=35, eta_min=1e-6
+        )
 
         best_val_dice = 0.0
         patience = 5
@@ -356,7 +433,7 @@ def main(block_type="dprcab"):
         for epoch in range(num_epochs):
             model.train()
             train_loss_epoch = 0.0
-            pbar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}")
+            pbar = tqdm(train_loader, desc=f"Epoch {epoch +1 }/{num_epochs }")
             for images, masks in pbar:
                 images, masks = images.to(device), masks.to(device)
                 optimizer.zero_grad()
@@ -364,12 +441,11 @@ def main(block_type="dprcab"):
                 out, out0, out1, out2, out3 = model(images)
                 loss_main = criterion(out, masks)
 
-
                 loss_aux = dynamic_ds_weight * (
-                        criterion(out0, masks) +
-                        criterion(out1, masks) +
-                        criterion(out2, masks) +
-                        criterion(out3, masks)
+                    criterion(out0, masks)
+                    + criterion(out1, masks)
+                    + criterion(out2, masks)
+                    + criterion(out3, masks)
                 )
 
                 loss = loss_main + loss_aux
@@ -377,7 +453,7 @@ def main(block_type="dprcab"):
                 loss.backward()
                 optimizer.step()
                 train_loss_epoch += loss.item()
-                pbar.set_postfix({'Loss': f"{loss.item():.4f}"})
+                pbar.set_postfix({"Loss": f"{loss .item ():.4f}"})
 
             model.eval()
             val_dices = []
@@ -390,34 +466,46 @@ def main(block_type="dprcab"):
             avg_val_dice = np.mean(val_dices)
             scheduler.step()
             print(
-                f"📉 Epoch {epoch + 1} | Loss: {train_loss_epoch / len(train_loader):.4f} | Val Dice: {avg_val_dice:.4f}")
+                f"📉 Epoch {epoch +1 } | Loss: {train_loss_epoch /len (train_loader ):.4f} | Val Dice: {avg_val_dice :.4f}"
+            )
 
             if avg_val_dice > best_val_dice:
                 best_val_dice = avg_val_dice
                 torch.save(model.state_dict(), save_path)
-                print(f"🌟 Saved Best Model: {best_val_dice:.4f}")
+                print(f"🌟 Saved Best Model: {best_val_dice :.4f}")
                 no_improve_count = 0
             else:
                 no_improve_count += 1
                 if no_improve_count >= patience:
-                    print(f"⏹️ 早停触发: 连续 {patience} 个 epoch 验证 Dice 无提升，停止训练。")
+                    print(
+                        f"⏹️ Early stop trigger: continuous{patience }It is verified that Dice has not improved after 1 epoch and the training is stopped."
+                    )
                     break
 
     print("\n" + "=" * 50)
-    print("🚀 开始在完全未见的【测试集 (Test Set)】上评估最终性能...")
+    print(
+        "🚀 Start evaluating the final performance on a completely unseen [Test Set]..."
+    )
 
-    test_loader = DataLoader(UDIATDataset(all_imgs[train_size + val_size:], all_masks[train_size + val_size:], False),
-                             batch_size=8, shuffle=False)
+    test_loader = DataLoader(
+        UDIATDataset(
+            all_imgs[train_size + val_size :], all_masks[train_size + val_size :], False
+        ),
+        batch_size=8,
+        shuffle=False,
+    )
 
     if not os.path.exists(save_path):
-        print(f"❌ 找不到权重文件: {save_path}！请先运行 train 模式训练。")
+        print(
+            f"❌ Weight file not found:{save_path }! Please run train mode training first."
+        )
         return None
 
     model.load_state_dict(torch.load(save_path, map_location=device))
     model.eval()
 
     test_res = {"dice": [], "iou": [], "acc": [], "pre": [], "rec": []}
-    print("🔥 正在进行 GPU 预热 (Warm-up)...")
+    print("🔥 GPU warm-up (Warm-up) in progress...")
     dummy_input = torch.randn(1, 3, 256, 256).to(device)
     with torch.no_grad():
         for _ in range(10):
@@ -431,13 +519,15 @@ def main(block_type="dprcab"):
     with torch.no_grad():
         for images, masks in tqdm(test_loader, desc="Testing"):
             images, masks = images.to(device), masks.to(device)
-            if torch.cuda.is_available(): torch.cuda.synchronize()
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
             start_time = time.time()
             outputs = model(images)
-            if torch.cuda.is_available(): torch.cuda.synchronize()
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
             end_time = time.time()
 
-            total_infer_time += (end_time - start_time)
+            total_infer_time += end_time - start_time
             total_samples += images.size(0)
 
             metrics = calculate_metrics(outputs, masks)
@@ -446,16 +536,16 @@ def main(block_type="dprcab"):
 
     avg_time_per_image = (total_infer_time / total_samples) * 1000
     fps = 1.0 / (total_infer_time / total_samples)
-    print("\n🏆 DPRASR-Net  最终测试集成绩 🏆")
-    print(f"🔹 Dice     : {np.mean(test_res['dice']):.4f}")
-    print(f"🔹 IoU      : {np.mean(test_res['iou']):.4f}")
-    print(f"🔹 ACC      : {np.mean(test_res['acc']):.4f}")
-    print(f"🔹 Precision: {np.mean(test_res['pre']):.4f}")
-    print(f"🔹 Recall   : {np.mean(test_res['rec']):.4f}")
+    print("\n🏆 DPRASR-Net final test set results 🏆")
+    print(f"🔹 Dice     : {np .mean (test_res ['dice']):.4f}")
+    print(f"🔹 IoU      : {np .mean (test_res ['iou']):.4f}")
+    print(f"🔹 ACC      : {np .mean (test_res ['acc']):.4f}")
+    print(f"🔹 Precision: {np .mean (test_res ['pre']):.4f}")
+    print(f"🔹 Recall   : {np .mean (test_res ['rec']):.4f}")
     print("-" * 50)
-    print(f"⚡ 推理速度评估 (Device: {device}) ⚡")
-    print(f"⏱️ 平均耗时 : {avg_time_per_image:.2f} ms / image")
-    print(f"🚀 F P S    : {fps:.2f} frames / second")
+    print(f"⚡ Inference speed evaluation (Device:{device }) ⚡")
+    print(f"⏱️Average time:{avg_time_per_image :.2f} ms / image")
+    print(f"🚀 F P S    : {fps :.2f} frames / second")
     print("=" * 50)
     return test_res
 

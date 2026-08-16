@@ -1,9 +1,10 @@
-
 import random
 import numpy as np
 import torch
 from torch.backends import cudnn
-def set_seed(seed=42,deterministic=True):
+
+
+def set_seed(seed=42, deterministic=True):
     if deterministic:
         cudnn.benchmark = False
         cudnn.deterministic = True

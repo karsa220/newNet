@@ -5,12 +5,15 @@ from .segformer import *
 from typing import Tuple
 from einops import rearrange
 
+
 class PatchExpand(nn.Module):
     def __init__(self, input_resolution, dim, dim_scale=2, norm_layer=nn.LayerNorm):
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
-        self.expand = nn.Linear(dim, 2*dim, bias=False) if dim_scale==2 else nn.Identity()
+        self.expand = (
+            nn.Linear(dim, 2 * dim, bias=False) if dim_scale == 2 else nn.Identity()
+        )
         self.norm = norm_layer(dim // dim_scale)
 
     def forward(self, x):
@@ -20,17 +23,18 @@ class PatchExpand(nn.Module):
         # print("x_shape-----",x.shape)
         H, W = self.input_resolution
         x = self.expand(x)
-        
+
         B, L, C = x.shape
         # print(x.shape)
         assert L == H * W, "input feature has wrong size"
 
         x = x.view(B, H, W, C)
-        x = rearrange(x, 'b h w (p1 p2 c)-> b (h p1) (w p2) c', p1=2, p2=2, c=C//4)
-        x = x.view(B,-1,C//4)
-        x= self.norm(x.clone())
+        x = rearrange(x, "b h w (p1 p2 c)-> b (h p1) (w p2) c", p1=2, p2=2, c=C // 4)
+        x = x.view(B, -1, C // 4)
+        x = self.norm(x.clone())
 
         return x
+
 
 class FinalPatchExpand_X4(nn.Module):
     def __init__(self, input_resolution, dim, dim_scale=4, norm_layer=nn.LayerNorm):
@@ -38,8 +42,8 @@ class FinalPatchExpand_X4(nn.Module):
         self.input_resolution = input_resolution
         self.dim = dim
         self.dim_scale = dim_scale
-        self.expand = nn.Linear(dim, 16*dim, bias=False)
-        self.output_dim = dim 
+        self.expand = nn.Linear(dim, 16 * dim, bias=False)
+        self.output_dim = dim
         self.norm = norm_layer(self.output_dim)
 
     def forward(self, x):
@@ -52,36 +56,60 @@ class FinalPatchExpand_X4(nn.Module):
         assert L == H * W, "input feature has wrong size"
 
         x = x.view(B, H, W, C)
-        x = rearrange(x, 'b h w (p1 p2 c)-> b (h p1) (w p2) c', p1=self.dim_scale, p2=self.dim_scale, c=C//(self.dim_scale**2))
-        x = x.view(B,-1,self.output_dim)
-        x= self.norm(x.clone())
+        x = rearrange(
+            x,
+            "b h w (p1 p2 c)-> b (h p1) (w p2) c",
+            p1=self.dim_scale,
+            p2=self.dim_scale,
+            c=C // (self.dim_scale**2),
+        )
+        x = x.view(B, -1, self.output_dim)
+        x = self.norm(x.clone())
 
         return x
 
 
 class SegU_decoder(nn.Module):
-    def __init__(self, input_size, in_out_chan, heads, reduction_ratios, n_class=9, norm_layer=nn.LayerNorm, is_last=False):
+    def __init__(
+        self,
+        input_size,
+        in_out_chan,
+        heads,
+        reduction_ratios,
+        n_class=9,
+        norm_layer=nn.LayerNorm,
+        is_last=False,
+    ):
         super().__init__()
         dims = in_out_chan[0]
         out_dim = in_out_chan[1]
         if not is_last:
-            self.concat_linear = nn.Linear(dims*2, out_dim)
+            self.concat_linear = nn.Linear(dims * 2, out_dim)
             # transformer decoder
-            self.layer_up = PatchExpand(input_resolution=input_size, dim=out_dim, dim_scale=2, norm_layer=norm_layer)
+            self.layer_up = PatchExpand(
+                input_resolution=input_size,
+                dim=out_dim,
+                dim_scale=2,
+                norm_layer=norm_layer,
+            )
             self.last_layer = None
         else:
-            self.concat_linear = nn.Linear(dims*4, out_dim)
+            self.concat_linear = nn.Linear(dims * 4, out_dim)
             # transformer decoder
-            self.layer_up = FinalPatchExpand_X4(input_resolution=input_size, dim=out_dim, dim_scale=4, norm_layer=norm_layer)
+            self.layer_up = FinalPatchExpand_X4(
+                input_resolution=input_size,
+                dim=out_dim,
+                dim_scale=4,
+                norm_layer=norm_layer,
+            )
             # self.last_layer = nn.Linear(out_dim, n_class)
-            self.last_layer = nn.Conv2d(out_dim, n_class,1)
+            self.last_layer = nn.Conv2d(out_dim, n_class, 1)
             # self.last_layer = None
 
         self.layer_former_1 = TransformerBlock(out_dim, heads, reduction_ratios)
         self.layer_former_2 = TransformerBlock(out_dim, heads, reduction_ratios)
-       
 
-        def init_weights(self): 
+        def init_weights(self):
             for m in self.modules():
                 if isinstance(m, nn.Linear):
                     nn.init.xavier_uniform_(m.weight)
@@ -97,8 +125,6 @@ class SegU_decoder(nn.Module):
 
         init_weights(self)
 
-        
-
     def forward(self, x1, x2=None):
         if x2 is not None:
             b, h, w, c = x2.shape
@@ -109,9 +135,13 @@ class SegU_decoder(nn.Module):
             cat_linear_x = self.concat_linear(cat_x)
             tran_layer_1 = self.layer_former_1(cat_linear_x, h, w)
             tran_layer_2 = self.layer_former_2(tran_layer_1, h, w)
-            
+
             if self.last_layer:
-                out = self.last_layer(self.layer_up(tran_layer_2).view(b, 4*h, 4*w, -1).permute(0,3,1,2)) 
+                out = self.last_layer(
+                    self.layer_up(tran_layer_2)
+                    .view(b, 4 * h, 4 * w, -1)
+                    .permute(0, 3, 1, 2)
+                )
             else:
                 out = self.layer_up(tran_layer_2)
         else:
@@ -145,10 +175,10 @@ class BridgeLayer_4(nn.Module):
         n2 = 8 * u
         n3 = 5 * u
         n4 = 2 * u
-        H1 = W1 = int(n1 ** 0.5)      # = H/4
-        H2 = W2 = H1 // 2             # = H/8
-        H3 = W3 = H2 // 2             # = H/16
-        H4 = W4 = H3 // 2             # = H/32
+        H1 = W1 = int(n1**0.5)  # = H/4
+        H2 = W2 = H1 // 2  # = H/8
+        H3 = W3 = H2 // 2  # = H/16
+        H4 = W4 = H3 // 2  # = H/32
         return (n1, n2, n3, n4), (H1, W1, H2, W2, H3, W3, H4, W4)
 
     def forward(self, inputs):
@@ -169,15 +199,17 @@ class BridgeLayer_4(nn.Module):
             inputs = torch.cat([c1f, c2f, c3f, c4f], dim=1)
         else:
             B, N, C = inputs.shape
-            (n1, n2, n3, n4), (H1, W1, H2, W2, H3, W3, H4, W4) = self._parse_sizes_from_total(N)
+            (n1, n2, n3, n4), (H1, W1, H2, W2, H3, W3, H4, W4) = (
+                self._parse_sizes_from_total(N)
+            )
 
         tx1 = inputs + self.attn(self.norm1(inputs))
         tx = self.norm2(tx1)
 
         tem1 = tx[:, :n1, :].reshape(B, -1, C)
-        tem2 = tx[:, n1:n1 + n2, :].reshape(B, -1, C * 2)
-        tem3 = tx[:, n1 + n2:n1 + n2 + n3, :].reshape(B, -1, C * 5)
-        tem4 = tx[:, n1 + n2 + n3:n1 + n2 + n3 + n4, :].reshape(B, -1, C * 8)
+        tem2 = tx[:, n1 : n1 + n2, :].reshape(B, -1, C * 2)
+        tem3 = tx[:, n1 + n2 : n1 + n2 + n3, :].reshape(B, -1, C * 5)
+        tem4 = tx[:, n1 + n2 + n3 : n1 + n2 + n3 + n4, :].reshape(B, -1, C * 8)
 
         m1f = self.mixffn1(tem1, H1, W1).reshape(B, -1, C)
         m2f = self.mixffn2(tem2, H2, W2).reshape(B, -1, C)
@@ -212,8 +244,8 @@ class BridgeLayer_3(nn.Module):
         n4 = 2 * u
         # n2 = (H/8)^2 * (C2/C) = (H/8)^2 * 2  →  H/8 = sqrt(n2/2)
         H2 = W2 = int((n2 // 2) ** 0.5)
-        H3 = W3 = H2 // 2                # = H/16
-        H4 = W4 = H3 // 2                # = H/32
+        H3 = W3 = H2 // 2  # = H/16
+        H4 = W4 = H3 // 2  # = H/32
         return (n2, n3, n4), (H2, W2, H3, W3, H4, W4)
 
     def forward(self, inputs):
@@ -239,8 +271,8 @@ class BridgeLayer_3(nn.Module):
         tx = self.norm2(tx1)
 
         tem2 = tx[:, :n2, :].reshape(B, -1, C * 2)
-        tem3 = tx[:, n2:n2 + n3, :].reshape(B, -1, C * 5)
-        tem4 = tx[:, n2 + n3:n2 + n3 + n4, :].reshape(B, -1, C * 8)
+        tem3 = tx[:, n2 : n2 + n3, :].reshape(B, -1, C * 5)
+        tem4 = tx[:, n2 + n3 : n2 + n3 + n4, :].reshape(B, -1, C * 8)
 
         m2f = self.mixffn2(tem2, H2, W2).reshape(B, -1, C)
         m3f = self.mixffn3(tem3, H3, W3).reshape(B, -1, C)
@@ -250,7 +282,6 @@ class BridgeLayer_3(nn.Module):
         tx2 = tx1 + t1
 
         return tx2
-
 
 
 class BridegeBlock_4(nn.Module):
@@ -270,21 +301,29 @@ class BridegeBlock_4(nn.Module):
         bridge4 = self.bridge_layer4(bridge3)
 
         B, N, C = bridge4.shape
-        u = N // 31                     # ratio 16:8:5:2, sum=31
+        u = N // 31  # ratio 16:8:5:2, sum=31
         n1 = 16 * u
         n2 = 8 * u
         n3 = 5 * u
         n4 = 2 * u
-        H1 = W1 = int(n1 ** 0.5)
+        H1 = W1 = int(n1**0.5)
         H2 = W2 = H1 // 2
         H3 = W3 = H2 // 2
         H4 = W4 = H3 // 2
 
         outs = []
         sk1 = bridge4[:, :n1, :].reshape(B, H1, W1, C).permute(0, 3, 1, 2)
-        sk2 = bridge4[:, n1:n1 + n2, :].reshape(B, H2, W2, C * 2).permute(0, 3, 1, 2)
-        sk3 = bridge4[:, n1 + n2:n1 + n2 + n3, :].reshape(B, H3, W3, C * 5).permute(0, 3, 1, 2)
-        sk4 = bridge4[:, n1 + n2 + n3:n1 + n2 + n3 + n4, :].reshape(B, H4, W4, C * 8).permute(0, 3, 1, 2)
+        sk2 = bridge4[:, n1 : n1 + n2, :].reshape(B, H2, W2, C * 2).permute(0, 3, 1, 2)
+        sk3 = (
+            bridge4[:, n1 + n2 : n1 + n2 + n3, :]
+            .reshape(B, H3, W3, C * 5)
+            .permute(0, 3, 1, 2)
+        )
+        sk4 = (
+            bridge4[:, n1 + n2 + n3 : n1 + n2 + n3 + n4, :]
+            .reshape(B, H4, W4, C * 8)
+            .permute(0, 3, 1, 2)
+        )
         outs.extend([sk1, sk2, sk3, sk4])
 
         return outs
@@ -311,45 +350,72 @@ class BridegeBlock_3(nn.Module):
         bridge4 = self.bridge_layer4(bridge3)
 
         B, N, C = bridge4.shape
-        u = N // 15                     # ratio 8:5:2, sum=15
+        u = N // 15  # ratio 8:5:2, sum=15
         n2 = 8 * u
         n3 = 5 * u
         n4 = 2 * u
-        H2 = W2 = int((n2 // 2) ** 0.5)   # n2 = (H/8)^2 * 2  →  H/8 = sqrt(n2/2)
+        H2 = W2 = int((n2 // 2) ** 0.5)  # n2 = (H/8)^2 * 2  →  H/8 = sqrt(n2/2)
         H3 = W3 = H2 // 2
         H4 = W4 = H3 // 2
 
         sk2 = bridge4[:, :n2, :].reshape(B, H2, W2, C * 2).permute(0, 3, 1, 2)
-        sk3 = bridge4[:, n2:n2 + n3, :].reshape(B, H3, W3, C * 5).permute(0, 3, 1, 2)
-        sk4 = bridge4[:, n2 + n3:n2 + n3 + n4, :].reshape(B, H4, W4, C * 8).permute(0, 3, 1, 2)
+        sk3 = bridge4[:, n2 : n2 + n3, :].reshape(B, H3, W3, C * 5).permute(0, 3, 1, 2)
+        sk4 = (
+            bridge4[:, n2 + n3 : n2 + n3 + n4, :]
+            .reshape(B, H4, W4, C * 8)
+            .permute(0, 3, 1, 2)
+        )
         outs.extend([sk2, sk3, sk4])
 
         return outs
 
 
 class MyDecoderLayer(nn.Module):
-    def __init__(self, input_size, in_out_chan, heads, reduction_ratios,token_mlp_mode, n_class=9, norm_layer=nn.LayerNorm, is_last=False):
+    def __init__(
+        self,
+        input_size,
+        in_out_chan,
+        heads,
+        reduction_ratios,
+        token_mlp_mode,
+        n_class=9,
+        norm_layer=nn.LayerNorm,
+        is_last=False,
+    ):
         super().__init__()
         dims = in_out_chan[0]
         out_dim = in_out_chan[1]
         if not is_last:
-            self.concat_linear = nn.Linear(dims*2, out_dim)
+            self.concat_linear = nn.Linear(dims * 2, out_dim)
             # transformer decoder
-            self.layer_up = PatchExpand(input_resolution=input_size, dim=out_dim, dim_scale=2, norm_layer=norm_layer)
+            self.layer_up = PatchExpand(
+                input_resolution=input_size,
+                dim=out_dim,
+                dim_scale=2,
+                norm_layer=norm_layer,
+            )
             self.last_layer = None
         else:
-            self.concat_linear = nn.Linear(dims*4, out_dim)
+            self.concat_linear = nn.Linear(dims * 4, out_dim)
             # transformer decoder
-            self.layer_up = FinalPatchExpand_X4(input_resolution=input_size, dim=out_dim, dim_scale=4, norm_layer=norm_layer)
+            self.layer_up = FinalPatchExpand_X4(
+                input_resolution=input_size,
+                dim=out_dim,
+                dim_scale=4,
+                norm_layer=norm_layer,
+            )
             # self.last_layer = nn.Linear(out_dim, n_class)
-            self.last_layer = nn.Conv2d(out_dim, n_class,1)
+            self.last_layer = nn.Conv2d(out_dim, n_class, 1)
             # self.last_layer = None
 
-        self.layer_former_1 = TransformerBlock(out_dim, heads, reduction_ratios, token_mlp_mode)
-        self.layer_former_2 = TransformerBlock(out_dim, heads, reduction_ratios, token_mlp_mode)
-       
+        self.layer_former_1 = TransformerBlock(
+            out_dim, heads, reduction_ratios, token_mlp_mode
+        )
+        self.layer_former_2 = TransformerBlock(
+            out_dim, heads, reduction_ratios, token_mlp_mode
+        )
 
-        def init_weights(self): 
+        def init_weights(self):
             for m in self.modules():
                 if isinstance(m, nn.Linear):
                     nn.init.xavier_uniform_(m.weight)
@@ -364,7 +430,7 @@ class MyDecoderLayer(nn.Module):
                         nn.init.zeros_(m.bias)
 
         init_weights(self)
-      
+
     def forward(self, x1, x2=None):
         if x2 is not None:
             b, h, w, c = x2.shape
@@ -375,9 +441,13 @@ class MyDecoderLayer(nn.Module):
             cat_linear_x = self.concat_linear(cat_x)
             tran_layer_1 = self.layer_former_1(cat_linear_x, h, w)
             tran_layer_2 = self.layer_former_2(tran_layer_1, h, w)
-            
+
             if self.last_layer:
-                out = self.last_layer(self.layer_up(tran_layer_2).view(b, 4*h, 4*w, -1).permute(0,3,1,2)) 
+                out = self.last_layer(
+                    self.layer_up(tran_layer_2)
+                    .view(b, 4 * h, 4 * w, -1)
+                    .permute(0, 3, 1, 2)
+                )
             else:
                 out = self.layer_up(tran_layer_2)
         else:
@@ -388,8 +458,15 @@ class MyDecoderLayer(nn.Module):
             out = self.layer_up(x1)
         return out
 
+
 class MISSFormer(nn.Module):
-    def __init__(self, num_classes=9, token_mlp_mode="mix_skip", encoder_pretrained=True, img_size=224):
+    def __init__(
+        self,
+        num_classes=9,
+        token_mlp_mode="mix_skip",
+        encoder_pretrained=True,
+        img_size=224,
+    ):
         super().__init__()
 
         reduction_ratios = [8, 4, 2, 1]
@@ -404,13 +481,42 @@ class MISSFormer(nn.Module):
         self.reduction_ratios = [1, 2, 4, 8]
         self.bridge = BridegeBlock_4(64, 1, self.reduction_ratios)
 
-        self.decoder_3 = MyDecoderLayer((d_base_feat_size, d_base_feat_size), in_out_chan[3], heads[3], reduction_ratios[3], token_mlp_mode, n_class=num_classes)
-        self.decoder_2 = MyDecoderLayer((d_base_feat_size * 2, d_base_feat_size * 2), in_out_chan[2], heads[2], reduction_ratios[2], token_mlp_mode, n_class=num_classes)
-        self.decoder_1 = MyDecoderLayer((d_base_feat_size * 4, d_base_feat_size * 4), in_out_chan[1], heads[1], reduction_ratios[1], token_mlp_mode, n_class=num_classes)
-        self.decoder_0 = MyDecoderLayer((d_base_feat_size * 8, d_base_feat_size * 8), in_out_chan[0], heads[0], reduction_ratios[0], token_mlp_mode, n_class=num_classes, is_last=True)
+        self.decoder_3 = MyDecoderLayer(
+            (d_base_feat_size, d_base_feat_size),
+            in_out_chan[3],
+            heads[3],
+            reduction_ratios[3],
+            token_mlp_mode,
+            n_class=num_classes,
+        )
+        self.decoder_2 = MyDecoderLayer(
+            (d_base_feat_size * 2, d_base_feat_size * 2),
+            in_out_chan[2],
+            heads[2],
+            reduction_ratios[2],
+            token_mlp_mode,
+            n_class=num_classes,
+        )
+        self.decoder_1 = MyDecoderLayer(
+            (d_base_feat_size * 4, d_base_feat_size * 4),
+            in_out_chan[1],
+            heads[1],
+            reduction_ratios[1],
+            token_mlp_mode,
+            n_class=num_classes,
+        )
+        self.decoder_0 = MyDecoderLayer(
+            (d_base_feat_size * 8, d_base_feat_size * 8),
+            in_out_chan[0],
+            heads[0],
+            reduction_ratios[0],
+            token_mlp_mode,
+            n_class=num_classes,
+            is_last=True,
+        )
 
     def _update_decoder_sizes(self, H4, W4):
-        """根据实际 bridge 输出尺寸更新 decoder 的 input_resolution，适配任意分辨率。"""
+        """Update the input_resolution of the decoder according to the actual bridge output size to adapt to any resolution."""
         self.decoder_3.layer_up.input_resolution = (H4, W4)
         self.decoder_2.layer_up.input_resolution = (H4 * 2, W4 * 2)
         self.decoder_1.layer_up.input_resolution = (H4 * 4, W4 * 4)
@@ -434,5 +540,3 @@ class MISSFormer(nn.Module):
         tmp_0 = self.decoder_0(tmp_1, bridge[0].permute(0, 2, 3, 1))
 
         return tmp_0
-
-         

@@ -7,6 +7,7 @@ class MSAG(nn.Module):
     """
     Multi-scale attention gate
     """
+
     def __init__(self, channel):
         super(MSAG, self).__init__()
         self.channel = channel
@@ -15,17 +16,32 @@ class MSAG(nn.Module):
             nn.BatchNorm2d(self.channel),
         )
         self.ordinaryConv = nn.Sequential(
-            nn.Conv2d(self.channel, self.channel, kernel_size=3, padding=1, stride=1, bias=True),
+            nn.Conv2d(
+                self.channel,
+                self.channel,
+                kernel_size=3,
+                padding=1,
+                stride=1,
+                bias=True,
+            ),
             nn.BatchNorm2d(self.channel),
         )
         self.dilationConv = nn.Sequential(
-            nn.Conv2d(self.channel, self.channel, kernel_size=3, padding=2, stride=1, dilation=2, bias=True),
+            nn.Conv2d(
+                self.channel,
+                self.channel,
+                kernel_size=3,
+                padding=2,
+                stride=1,
+                dilation=2,
+                bias=True,
+            ),
             nn.BatchNorm2d(self.channel),
         )
         self.voteConv = nn.Sequential(
             nn.Conv2d(self.channel * 3, self.channel, kernel_size=(1, 1)),
             nn.BatchNorm2d(self.channel),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
         self.relu = nn.ReLU(inplace=True)
 

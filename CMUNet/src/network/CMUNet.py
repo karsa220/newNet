@@ -17,17 +17,28 @@ class ConvMixerBlock(nn.Module):
     def __init__(self, dim=1024, depth=7, k=7):
         super(ConvMixerBlock, self).__init__()
         self.block = nn.Sequential(
-            *[nn.Sequential(
-                Residual(nn.Sequential(
-                    # deep wise
-                    nn.Conv2d(dim, dim, kernel_size=(k, k), groups=dim, padding=(k // 2, k // 2)),
+            *[
+                nn.Sequential(
+                    Residual(
+                        nn.Sequential(
+                            # deep wise
+                            nn.Conv2d(
+                                dim,
+                                dim,
+                                kernel_size=(k, k),
+                                groups=dim,
+                                padding=(k // 2, k // 2),
+                            ),
+                            nn.GELU(),
+                            nn.BatchNorm2d(dim),
+                        )
+                    ),
+                    nn.Conv2d(dim, dim, kernel_size=(1, 1)),
                     nn.GELU(),
-                    nn.BatchNorm2d(dim)
-                )),
-                nn.Conv2d(dim, dim, kernel_size=(1, 1)),
-                nn.GELU(),
-                nn.BatchNorm2d(dim)
-            ) for i in range(depth)]
+                    nn.BatchNorm2d(dim),
+                )
+                for i in range(depth)
+            ]
         )
 
     def forward(self, x):
@@ -44,7 +55,7 @@ class conv_block(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(ch_out, ch_out, kernel_size=3, stride=1, padding=1, bias=True),
             nn.BatchNorm2d(ch_out),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
         )
 
     def forward(self, x):
@@ -59,7 +70,7 @@ class up_conv(nn.Module):
             nn.Upsample(scale_factor=2),
             nn.Conv2d(ch_in, ch_out, kernel_size=3, stride=1, padding=1, bias=True),
             nn.BatchNorm2d(ch_out),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
         )
 
     def forward(self, x):

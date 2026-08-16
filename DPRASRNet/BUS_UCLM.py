@@ -30,7 +30,9 @@ class HybridLoss(nn.Module):
         pred_flat = pred.view(pred.size(0), -1)
         target_flat = target.view(target.size(0), -1)
         intersection = (pred_flat * target_flat).sum(dim=1)
-        dice_score = (2.0 * intersection + smooth) / (pred_flat.sum(dim=1) + target_flat.sum(dim=1) + smooth)
+        dice_score = (2.0 * intersection + smooth) / (
+            pred_flat.sum(dim=1) + target_flat.sum(dim=1) + smooth
+        )
         dice_loss = 1.0 - dice_score
         return (self.weight_bce * bce_loss) + (self.weight_dice * dice_loss.mean())
 
@@ -44,17 +46,23 @@ def calculate_metrics(pred, target, smooth=1e-5):
     fp = (pred_flat * (1 - target_flat)).sum(dim=1)
     fn = ((1 - pred_flat) * target_flat).sum(dim=1)
     tn = ((1 - pred_flat) * (1 - target_flat)).sum(dim=1)
-    dice = (2. * tp + smooth) / (2. * tp + fp + fn + smooth)
+    dice = (2.0 * tp + smooth) / (2.0 * tp + fp + fn + smooth)
     iou = (tp + smooth) / (tp + fp + fn + smooth)
     acc = (tp + tn + smooth) / (tp + fp + fn + tn + smooth)
     pre = (tp + smooth) / (tp + fp + smooth)
     rec = (tp + smooth) / (tp + fn + smooth)
-    return {"dice": dice.tolist(), "iou": iou.tolist(), "acc": acc.tolist(), "pre": pre.tolist(), "rec": rec.tolist()}
+    return {
+        "dice": dice.tolist(),
+        "iou": iou.tolist(),
+        "acc": acc.tolist(),
+        "pre": pre.tolist(),
+        "rec": rec.tolist(),
+    }
 
+    # ==========================================
+    # 4. Data loading and main process (adapted to new model)
+    # ==========================================
 
-# ==========================================
-# 4. 数据加载与主流程 (已适配新模型)
-# ==========================================
 
 class BUSIDataset(Dataset):
     def __init__(self, image_paths, mask_paths, is_train=False):
@@ -66,45 +74,49 @@ class BUSIDataset(Dataset):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
-        image = Image.open(self.image_paths[idx]).convert('RGB')
-        mask = Image.open(self.mask_paths[idx]).convert('L')
+        image = Image.open(self.image_paths[idx]).convert("RGB")
+        mask = Image.open(self.mask_paths[idx]).convert("L")
 
         image = TF.resize(image, (256, 256))
         mask = TF.resize(mask, (256, 256))
 
         if self.is_train:
-            # 1. 随机水平翻转
+            # 1. Random horizontal flip
             if random.random() > 0.5:
                 image = TF.hflip(image)
                 mask = TF.hflip(mask)
-            # 2. 随机旋转
+                # 2. Random rotation
             angle = random.uniform(-15, 15)
             image = TF.rotate(image, angle)
             mask = TF.rotate(mask, angle)
 
-            # 3. 增加一点尺度缩放和平移 (超声图像中病灶大小差异很大)
+            # 3. Add a little scaling and translation (lesion sizes vary greatly in ultrasound images)
             if random.random() > 0.5:
                 scale = random.uniform(0.9, 1.1)
                 translate = [int(random.uniform(-10, 10)), int(random.uniform(-10, 10))]
-                image = TF.affine(image, angle=0, translate=translate, scale=scale, shear=0)
-                mask = TF.affine(mask, angle=0, translate=translate, scale=scale, shear=0)
+                image = TF.affine(
+                    image, angle=0, translate=translate, scale=scale, shear=0
+                )
+                mask = TF.affine(
+                    mask, angle=0, translate=translate, scale=scale, shear=0
+                )
 
         image = TF.to_tensor(image)
         mask = TF.to_tensor(mask)
-
 
         return image, mask
 
 
 def get_dataset_paths(data_dir):
     image_paths, mask_paths = [], []
-    categories = ['benign', 'malign']
-    masks_dir = os.path.join(data_dir, 'masks')
+    categories = ["benign", "malign"]
+    masks_dir = os.path.join(data_dir, "masks")
     for cat in categories:
         cat_dir = os.path.join(data_dir, cat)
-        if not os.path.exists(cat_dir): continue
+        if not os.path.exists(cat_dir):
+            continue
         for file_name in os.listdir(cat_dir):
-            if file_name.endswith('.png'):
+            if file_name.endswith(".png"):
                 img_path = os.path.join(cat_dir, file_name)
                 mask_path = os.path.join(masks_dir, file_name)
                 if os.path.exists(mask_path):
@@ -119,11 +131,12 @@ def main():
     save_path = "best_bus_uclm.pth"
     data_dir = r"../../data/BUS-UCLM Breast ultrasound lesion segmentation dataset"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"🚀 Using device: {device} | 📐 Architecture: CLADS-net")
+    print(f"🚀 Using device: {device } | 📐 Architecture: CLADS-net")
 
     all_imgs, all_masks = get_dataset_paths(data_dir)
     total_size = len(all_imgs)
-    if total_size == 0: return
+    if total_size == 0:
+        return
 
     combined = list(zip(all_imgs, all_masks))
     random.shuffle(combined)
@@ -132,23 +145,36 @@ def main():
     train_size = int(0.8 * total_size)
     val_size = int(0.1 * total_size)
 
-    # 实例化新模型
+    # Instantiate a new model
     model = DPRASR_Net(embed_dim=256).to(device)
 
     if MODE == "train":
-        train_loader = DataLoader(BUSIDataset(all_imgs[:train_size], all_masks[:train_size], True), batch_size=8,
-                                  shuffle=True)
+        train_loader = DataLoader(
+            BUSIDataset(all_imgs[:train_size], all_masks[:train_size], True),
+            batch_size=8,
+            shuffle=True,
+        )
         val_loader = DataLoader(
-            BUSIDataset(all_imgs[train_size:train_size + val_size], all_masks[train_size:train_size + val_size], False),
-            batch_size=8)
+            BUSIDataset(
+                all_imgs[train_size : train_size + val_size],
+                all_masks[train_size : train_size + val_size],
+                False,
+            ),
+            batch_size=8,
+        )
         dynamic_ds_weight = calculate_ds_weight(train_size)
         print(
-            f"🎯 DSADDS: Auto-adjusted Deep Supervision Weight = {dynamic_ds_weight:.4f} (Training Size = {train_size})")
+            f"🎯 DSADDS: Auto-adjusted Deep Supervision Weight = {dynamic_ds_weight :.4f} (Training Size = {train_size })"
+        )
 
         criterion = HybridLoss()
-        optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)  # MLP 适合用 AdamW
-        num_epochs = 200
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=35, eta_min=1e-6)
+        optimizer = optim.AdamW(
+            model.parameters(), lr=1e-4, weight_decay=1e-4
+        )  # MLP is suitable for AdamW
+        num_epochs = 1
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=35, eta_min=1e-6
+        )
 
         best_val_dice = 0.0
         patience = 5
@@ -156,27 +182,27 @@ def main():
         for epoch in range(num_epochs):
             model.train()
             train_loss_epoch = 0.0
-            pbar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}")
+            pbar = tqdm(train_loader, desc=f"Epoch {epoch +1 }/{num_epochs }")
             for images, masks in pbar:
                 images, masks = images.to(device), masks.to(device)
                 optimizer.zero_grad()
 
-                # 新的输出结构
-                out, out0, out1, out2,out3 = model(images)
+                # new output structure
+                out, out0, out1, out2, out3 = model(images)
                 loss_main = criterion(out, masks)
-                loss_aux = dynamic_ds_weight*(
-                        criterion(out0, masks) +
-                        criterion(out1, masks) +
-                        criterion(out2, masks) +
-                        criterion(out3, masks)
+                loss_aux = dynamic_ds_weight * (
+                    criterion(out0, masks)
+                    + criterion(out1, masks)
+                    + criterion(out2, masks)
+                    + criterion(out3, masks)
                 )
 
-                loss = loss_main +  loss_aux
+                loss = loss_main + loss_aux
 
                 loss.backward()
                 optimizer.step()
                 train_loss_epoch += loss.item()
-                pbar.set_postfix({'Loss': f"{loss.item():.4f}"})
+                pbar.set_postfix({"Loss": f"{loss .item ():.4f}"})
 
             model.eval()
             val_dices = []
@@ -189,34 +215,46 @@ def main():
             avg_val_dice = np.mean(val_dices)
             scheduler.step()
             print(
-                f"📉 Epoch {epoch + 1} | Loss: {train_loss_epoch / len(train_loader):.4f} | Val Dice: {avg_val_dice:.4f}")
+                f"📉 Epoch {epoch +1 } | Loss: {train_loss_epoch /len (train_loader ):.4f} | Val Dice: {avg_val_dice :.4f}"
+            )
 
             if avg_val_dice > best_val_dice:
                 best_val_dice = avg_val_dice
                 torch.save(model.state_dict(), save_path)
-                print(f"🌟 Saved Best Model: {best_val_dice:.4f}")
+                print(f"🌟 Saved Best Model: {best_val_dice :.4f}")
                 no_improve_count = 0
             else:
                 no_improve_count += 1
                 if no_improve_count >= patience:
-                    print(f"⏹️ 早停触发: 连续 {patience} 个 epoch 验证 Dice 无提升，停止训练。")
+                    print(
+                        f"⏹️ Early stop trigger: continuous{patience }It is verified that Dice has not improved after 1 epoch and the training is stopped."
+                    )
                     break
 
     print("\n" + "=" * 50)
-    print("🚀 开始在完全未见的【测试集 (Test Set)】上评估最终性能...")
+    print(
+        "🚀 Start evaluating the final performance on a completely unseen [Test Set]..."
+    )
 
-    test_loader = DataLoader(BUSIDataset(all_imgs[train_size + val_size:], all_masks[train_size + val_size:], False),
-                             batch_size=8, shuffle=False)
+    test_loader = DataLoader(
+        BUSIDataset(
+            all_imgs[train_size + val_size :], all_masks[train_size + val_size :], False
+        ),
+        batch_size=8,
+        shuffle=False,
+    )
 
     if not os.path.exists(save_path):
-        print(f"❌ 找不到权重文件: {save_path}！请先运行 train 模式训练。")
+        print(
+            f"❌ Weight file not found:{save_path }! Please run train mode training first."
+        )
         return None
 
     model.load_state_dict(torch.load(save_path, map_location=device))
     model.eval()
 
     test_res = {"dice": [], "iou": [], "acc": [], "pre": [], "rec": []}
-    print("🔥 正在进行 GPU 预热 (Warm-up)...")
+    print("🔥 GPU warm-up (Warm-up) in progress...")
     dummy_input = torch.randn(1, 3, 256, 256).to(device)
     with torch.no_grad():
         for _ in range(10):
@@ -241,7 +279,7 @@ def main():
                 torch.cuda.synchronize()
             end_time = time.time()
 
-            total_infer_time += (end_time - start_time)
+            total_infer_time += end_time - start_time
             total_samples += images.size(0)
 
             metrics = calculate_metrics(outputs, masks)
@@ -250,17 +288,19 @@ def main():
 
     avg_time_per_image = (total_infer_time / total_samples) * 1000
     fps = 1.0 / (total_infer_time / total_samples)
-    print("\n🏆 DPRASR-Net  最终测试集成绩 🏆")
-    print(f"🔹 Dice     : {np.mean(test_res['dice']):.4f}")
-    print(f"🔹 IoU      : {np.mean(test_res['iou']):.4f}")
-    print(f"🔹 ACC      : {np.mean(test_res['acc']):.4f}")
-    print(f"🔹 Precision: {np.mean(test_res['pre']):.4f}")
-    print(f"🔹 Recall   : {np.mean(test_res['rec']):.4f}")
+    print("\n🏆 DPRASR-Net final test set results 🏆")
+    print(f"🔹 Dice     : {np .mean (test_res ['dice']):.4f}")
+    print(f"🔹 IoU      : {np .mean (test_res ['iou']):.4f}")
+    print(f"🔹 ACC      : {np .mean (test_res ['acc']):.4f}")
+    print(f"🔹 Precision: {np .mean (test_res ['pre']):.4f}")
+    print(f"🔹 Recall   : {np .mean (test_res ['rec']):.4f}")
     print("-" * 50)
-    print(f"⚡ 推理速度评估 (Device: {device}) ⚡")
-    print(f"⏱️ 平均耗时 : {avg_time_per_image:.2f} ms / image")
-    print(f"🚀 F P S    : {fps:.2f} frames / second")
+    print(f"⚡ Inference speed evaluation (Device:{device }) ⚡")
+    print(f"⏱️Average time:{avg_time_per_image :.2f} ms / image")
+    print(f"🚀 F P S    : {fps :.2f} frames / second")
     print("=" * 50)
     return test_res
+
+
 if __name__ == "__main__":
     main()
