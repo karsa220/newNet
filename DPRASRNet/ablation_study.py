@@ -19,7 +19,7 @@ from DPRASRNet.rcab_dprcab_comparison import RCAB
 # ==========================================
 # 1. Dynamic deep supervision weight calculation (dprcab)
 # ==========================================
-def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0, W_min=0.15, W_max=0.45):
+def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0, W_min=0.15, W_max=0.30):
     """Use a generalized logistic function to calculate deep supervision weights based on the dataset size.
     Advantages:
     1. Boundedness: No matter how big or small the dataset_size is, the weight is always strictly limited to (W_min, W_max).
