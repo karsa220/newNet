@@ -345,6 +345,10 @@ def main():
     ap.add_argument("--nsd_tau", type=float, default=2.0,
                     help="NSD tolerance in pixels (evaluated at 256x256)")
     ap.add_argument("--out_dir", default=".")
+    ap.add_argument("--variants", nargs="+", choices=list(VARIANTS.keys()),
+                    default=list(VARIANTS.keys()),
+                    help="routing variants to evaluate (subset of: "
+                         + ", ".join(VARIANTS.keys()) + ")")
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
 
@@ -362,7 +366,7 @@ def main():
     assert len(all_imgs) > 0, "no data found, check --data_dir"
 
     results = {}  # fusion -> list of per-seed dicts
-    for fusion in VARIANTS:
+    for fusion in args.variants:
         results[fusion] = []
         for seed in args.seeds:
             print(f"\n=== variant: {fusion} | seed: {seed} ===")
