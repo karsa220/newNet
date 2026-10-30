@@ -75,28 +75,47 @@ class DPRCAB(nn.Module):
 
 
 class AdaptiveCrossScaleSoftRouting(nn.Module):
-    def __init__(self, channels, num_scales=5, reduction=4):
+    """ACSSR: channel-level routing refined by per-pixel modulation.
+
+    Two score branches are computed on the same concatenated features:
+      * channel branch  -- global descriptor (GAP) -> MLP -> score per (scale, channel)
+      * pixel branch    -- 1x1 conv bottleneck -> score per (scale, channel, pixel)
+    The pixel branch enters as a residual term scaled by a learnable beta,
+    so the routing stays stable on small datasets while remaining spatially
+    adaptive. Softmax is taken over the K scales.
+    """
+
+    def __init__(self, channels, num_scales=5, reduction=4, beta_init=0.1):
         super().__init__()
         self.num_scales = num_scales
         self.channels = channels
         mid_channels = max(1, (channels * num_scales) // reduction)
 
-        self.router = nn.Sequential(
+        self.gap = nn.AdaptiveAvgPool2d(1)
+        # channel branch: (B, K*C) descriptor -> MLP -> (B, K*C)
+        self.mlp_ch = nn.Sequential(
+            nn.Linear(channels * num_scales, mid_channels),
+            nn.GELU(),
+            nn.Linear(mid_channels, channels * num_scales),
+        )
+        # pixel branch: (B, K*C, H, W) -> bottleneck -> (B, K*C, H, W)
+        self.router_px = nn.Sequential(
             nn.Conv2d(channels * num_scales, mid_channels, kernel_size=1, bias=False),
             nn.BatchNorm2d(mid_channels),
             nn.GELU(),
             nn.Conv2d(mid_channels, channels * num_scales, kernel_size=1, bias=False),
         )
+        self.beta = nn.Parameter(torch.tensor(float(beta_init)))
 
     def forward(self, *features):
         B, C, H, W = features[0].shape
-        concat_f = torch.cat(features, dim=1)
-        attn_weights = self.router(concat_f)
-        attn_weights = attn_weights.view(B, self.num_scales, C, H, W)
-        attn_weights = F.softmax(attn_weights, dim=1)
+        concat_f = torch.cat(features, dim=1)                     # (B, K*C, H, W)
+        a_ch = self.mlp_ch(self.gap(concat_f).flatten(1))         # (B, K*C)
+        a_ch = a_ch.view(B, self.num_scales, C, 1, 1)
+        a_px = self.router_px(concat_f).view(B, self.num_scales, C, H, W)
+        attn = F.softmax(a_ch + self.beta * a_px, dim=1)          # (B, K, C, H, W)
         stacked_f = torch.stack(features, dim=1)
-        fused_out = (stacked_f * attn_weights).sum(dim=1)
-        return fused_out
+        return (stacked_f * attn).sum(dim=1)
 
 
 class ChannelAdapter(nn.Module):

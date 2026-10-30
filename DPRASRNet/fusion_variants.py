@@ -124,10 +124,48 @@ class ACSSRPixelRouting(nn.Module):
 
 
 # ----------------------------------------------------------------------
+# V4: channel-level routing refined by per-pixel modulation (hybrid)
+#     (identical to main.py AdaptiveCrossScaleSoftRouting after the 2026-10
+#      revision: a GAP descriptor branch + a pixel branch scaled by beta)
+# ----------------------------------------------------------------------
+class ACSSRPixelChannelRouting(nn.Module):
+    def __init__(self, channels, num_scales=5, reduction=4, beta_init=0.1):
+        super().__init__()
+        self.num_scales = num_scales
+        self.channels = channels
+        mid = max(1, (channels * num_scales) // reduction)
+
+        self.gap = nn.AdaptiveAvgPool2d(1)
+        self.mlp_ch = nn.Sequential(
+            nn.Linear(channels * num_scales, mid),
+            nn.GELU(),
+            nn.Linear(mid, channels * num_scales),
+        )
+        self.router_px = nn.Sequential(
+            nn.Conv2d(channels * num_scales, mid, kernel_size=1, bias=False),
+            nn.BatchNorm2d(mid),
+            nn.GELU(),
+            nn.Conv2d(mid, channels * num_scales, kernel_size=1, bias=False),
+        )
+        self.beta = nn.Parameter(torch.tensor(float(beta_init)))
+
+    def forward(self, *features):
+        B, C, H, W = features[0].shape
+        concat_f = torch.cat(features, dim=1)
+        a_ch = self.mlp_ch(self.gap(concat_f).flatten(1)).view(B, self.num_scales, C, 1, 1)
+        a_px = self.router_px(concat_f).view(B, self.num_scales, C, H, W)
+        attn = F.softmax(a_ch + self.beta * a_px, dim=1)
+        stacked = torch.stack(features, dim=1)
+        return (stacked * attn).sum(dim=1)
+
+
+
+# ----------------------------------------------------------------------
 VARIANTS = {
     "sknet_select": SKNetSelectRouting,      # V1: baseline routing (SKNet)
     "acssr_channel": ACSSRChannelRouting,    # V2: paper equations (5)-(8)
-    "acssr_pixel": ACSSRPixelRouting,        # V3: released-code version
+    "acssr_pixel": ACSSRPixelRouting,        # V3: released-code version (before revision)
+    "acssr_pixel_channel": ACSSRPixelChannelRouting,  # V4: hybrid (current main.py)
 }
 
 
