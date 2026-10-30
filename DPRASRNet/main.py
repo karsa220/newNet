@@ -1,5 +1,7 @@
 from seed.set_seed import set_seed
 import os
+import sys
+import argparse
 import random
 import time
 import numpy as np
@@ -12,6 +14,9 @@ from torchvision import models
 import torchvision.transforms.functional as TF
 from PIL import Image
 from tqdm import tqdm
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from boundary_metrics import boundary_metrics_batch
 
 # ==========================================
 # Innovation: Dynamic deep supervision weight calculation with data set size awareness
@@ -324,10 +329,19 @@ def get_dataset_paths(data_dir):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="DPRASR-Net on breast ultrasound data")
+    parser.add_argument("--mode", choices=["train", "test"], default="train",
+                        help="train: train then evaluate on the test split; test: evaluate a saved checkpoint only")
+    parser.add_argument("--data_dir", default=r"../../data/Dataset_BUSI_with_GT")
+    parser.add_argument("--save_path", default="best_busi.pth")
+    parser.add_argument("--epochs", type=int, default=200)
+    parser.add_argument("--batch_size", type=int, default=8)
+    args = parser.parse_args()
+
     set_seed(42)
-    MODE = "train"  # The default is train for testing
-    save_path = "best_busi.pth"
-    data_dir = r"../../data/Dataset_BUSI_with_GT"
+    MODE = args.mode
+    save_path = args.save_path
+    data_dir = args.data_dir
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"🚀 Using device: {device } | 📐 Architecture: DPRASR-Net")
@@ -358,7 +372,7 @@ def main():
     if MODE == "train":
         train_loader = DataLoader(
             BUSIDataset(all_imgs[:train_size], all_masks[:train_size], True),
-            batch_size=8,
+            batch_size=args.batch_size,
             shuffle=True,
         )
         val_loader = DataLoader(
@@ -367,12 +381,12 @@ def main():
                 all_masks[train_size : train_size + val_size],
                 False,
             ),
-            batch_size=8,
+            batch_size=args.batch_size,
         )
 
         criterion = HybridLoss()
         optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
-        num_epochs = 200
+        num_epochs = args.epochs
         scheduler = optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=35, eta_min=1e-6
         )
@@ -455,6 +469,7 @@ def main():
     model.eval()
 
     test_res = {"dice": [], "iou": [], "acc": [], "pre": [], "rec": []}
+    boundary_res = {"hd95": [], "assd": [], "nsd": []}
     print("🔥 GPU warm-up (Warm-up) in progress...")
     dummy_input = torch.randn(1, 3, 256, 256).to(device)
     with torch.no_grad():
@@ -484,6 +499,12 @@ def main():
             for k in test_res.keys():
                 test_res[k].extend(metrics[k])
 
+            bm = boundary_metrics_batch(outputs, masks)
+            for k in boundary_res.keys():
+                boundary_res[k].extend(
+                    [v for v in bm["per_sample"][k] if not np.isnan(v)]
+                )
+
     avg_time_per_image = (total_infer_time / total_samples) * 1000
     fps = 1.0 / (total_infer_time / total_samples)
     print("\n🏆 DPRASR-Net final test set results 🏆")
@@ -492,6 +513,14 @@ def main():
     print(f"🔹 ACC      : {np .mean (test_res ['acc']):.4f}")
     print(f"🔹 Precision: {np .mean (test_res ['pre']):.4f}")
     print(f"🔹 Recall   : {np .mean (test_res ['rec']):.4f}")
+    n_valid = len(boundary_res["hd95"])
+    n_total = len(test_res["dice"])
+    if n_valid > 0:
+        print(f"🔹 HD95     : {np.mean(boundary_res['hd95']):.2f} px   ({n_valid}/{n_total} valid)")
+        print(f"🔹 ASSD     : {np.mean(boundary_res['assd']):.2f} px")
+        print(f"🔹 NSD      : {np.mean(boundary_res['nsd']):.4f}   (tau=2 px)")
+    else:
+        print("🔹 HD95/ASSD/NSD: no valid sample (all masks empty)")
     print("-" * 50)
     print(f"⚡ Inference speed evaluation (Device:{device }) ⚡")
     print(f"⏱️Average time:{avg_time_per_image :.2f} ms / image")
