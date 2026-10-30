@@ -392,7 +392,7 @@ def main():
         r"\begin{table}[!t]", r"\centering",
         r"\caption{Controlled comparison of cross-scale routing mechanisms "
         rf"(same backbone, DPRCAB, and training protocol; {args.dataset}; "
-        rf"mean$\pm$std over {len(args.seeds)} seeds).}",
+        rf"mean$\pm$std over {len(args.seeds)} seeds).}}",
         r"\label{tab:acssr_sknet}",
         r"\setlength{\tabcolsep}{3pt}",
         r"\begin{tabular}{l|ccccc|ccc}", r"\hline",
