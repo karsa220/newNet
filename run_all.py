@@ -32,7 +32,6 @@ MODELS = [
     ("unet", "main.py", "udiat.py", "BUS_UCLM.py"),
     ("unetplusplus", "main.py", "UDIAT.py", "BUS_UCLM.py"),
     ("swinunet", "main.py", "udiat.py", "BUS_UCLM.py"),
-    ("segformer", "main.py", "udiat.py", "BUS_UCLM.py"),
     ("hiformer", "main.py", "udiat.py", "BUS_UCLM.py"),
     ("missformer", "main.py", "udiat.py", "BUS_UCLM.py"),
     ("LVUnet", "main.py", "udiat.py", "BUS_UCLM.py"),
