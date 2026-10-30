@@ -173,3 +173,70 @@ ls ../data
 ```
 
 You can then run the training/inference scripts as described in the project.
+
+---
+
+## Evaluation, Profiling and Ablation Scripts
+
+All commands below are run from the repository root, with `PYTHONPATH` already set as described above.
+Every ablation script takes `--dataset {BUSI,UDIAT,BUS_UCLM}` and `--data_dir <path>`, and writes its LaTeX-ready
+summary to `--out_dir` (default `.`).
+
+### Boundary-aware metrics — `DPRASRNet/boundary_metrics.py`
+
+Computes **HD95**, **ASSD** and **NSD** (`tau = 2` pixels by default). Images whose ground-truth mask is empty are
+excluded from the averages instead of being scored as zero. This module is a library, not a CLI; it is imported by the
+ablation scripts below:
+
+```python
+from boundary_metrics import boundary_metrics_batch   # returns dict with hd95 / assd / nsd
+```
+
+### Model size and cost — `profile_model.py`
+
+```bash
+python profile_model.py --size 256     # -> Params (M), MACs (G), FLOPs (G), per-module parameter share
+```
+
+### ACSSR vs. SKNet "select" — `DPRASRNet/acssr_ablation.py`
+
+Controlled comparison of three fusion rules under an identical split and protocol:
+
+| Variant | Rule |
+|---|---|
+| V1 | SKNet original `select`: global pooling per branch, MLP, branch-wise weighting |
+| V2 | channel-level routing |
+| V3 | ACSSR: concatenate raw features, softmax over the scale dimension, per-channel per-pixel weights |
+
+```bash
+python DPRASRNet/acssr_ablation.py --dataset BUSI --data_dir ../data/Dataset_BUSI_with_GT
+# single seed run:
+python DPRASRNet/acssr_ablation.py --dataset BUSI --data_dir ../data/Dataset_BUSI_with_GT --seeds 42
+```
+
+Output: `acssr_sknet_ablation_results.txt`. Supported datasets: `BUSI`, `UDIAT` (`--seeds` accepts several values, default `42 43 44`).
+
+### Decoder ablation — `DPRASRNet/unet_decoder_ablation.py`
+
+Full model vs. the same pretrained DenseNet-121 encoder with a **standard U-Net decoder** and no ACSSR / DPRCAB /
+deep supervision, isolating the contribution of the proposed decoding path.
+
+```bash
+python DPRASRNet/unet_decoder_ablation.py --dataset BUSI --data_dir ../data/Dataset_BUSI_with_GT
+```
+
+Output: `decoder_ablation_results_<dataset>.txt`.
+
+### Deep-supervision weight ablation — `DPRASRNet/static_weight_ablation.py`
+
+Dynamic dataset-size-aware weights (DSADS) vs. no deep supervision vs. fixed weights.
+
+```bash
+python DPRASRNet/static_weight_ablation.py --dataset BUSI --data_dir ../data/Dataset_BUSI_with_GT \
+       --weights dynamic 0.1 0.15 0.2 0.25 0.3
+```
+
+Output: `ds_weight_ablation_results_<dataset>.txt`.
+
+> Training data is split with a fixed, deterministic protocol inside each script (`--seed`, default `42`), so every
+> variant in a table is trained and evaluated on exactly the same images.
