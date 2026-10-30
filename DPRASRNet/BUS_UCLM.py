@@ -115,7 +115,7 @@ def get_dataset_paths(data_dir):
         cat_dir = os.path.join(data_dir, cat)
         if not os.path.exists(cat_dir):
             continue
-        for file_name in os.listdir(cat_dir):
+        for file_name in sorted(os.listdir(cat_dir)):
             if file_name.endswith(".png"):
                 img_path = os.path.join(cat_dir, file_name)
                 mask_path = os.path.join(masks_dir, file_name)
