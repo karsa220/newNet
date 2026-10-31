@@ -1,5 +1,5 @@
 """
-Ablation: full CLADS head vs. plain U-Net decoder on the same DenseNet-121 encoder.
+Ablation: full DPRASR-Net head vs. plain U-Net decoder on the same DenseNet-121 encoder.
 ===================================================================================
 
 Reviewer question answered: "is the gain from the proposed fusion head, or just
@@ -8,14 +8,14 @@ from the (pretrained) DenseNet-121 encoder?"
 Two configurations, everything else identical (encoder, ImageNet init, split,
 resolution, augmentation, loss, optimizer, LR schedule, early stopping, seed):
 
-  clads_full     -- the full model (DPRCAB + ChannelAdapter + ACSSR fusion +
+  dprasr_full     -- the full model (DPRCAB + ChannelAdapter + ACSSR fusion +
                     aux deep-supervision heads, dynamic DS weight), identical
                     to the production main.py.
   unet_decoder   -- DenseNet-121 encoder + STANDARD U-Net decoder (bilinear up
                     + concat skip + double conv), NO proposed modules, NO aux
                     heads, NO deep supervision.
 
-Run (from CLADS-Net root, with boundary_metrics.py in the same folder):
+Run (from DPRASR-Net root, with boundary_metrics.py in the same folder):
   python unet_decoder_ablation.py --dataset BUSI     --data_dir /path/to/Dataset_BUSI_with_GT
   python unet_decoder_ablation.py --dataset UDIAT    --data_dir /path/to/UDIAT_Dataset_B
   python unet_decoder_ablation.py --dataset BUS_UCLM --data_dir "/path/to/BUS-UCLM ..."
@@ -66,12 +66,12 @@ def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0,
 
 # ----------------------------------------------------------------
 # 1. Proposed modules (frozen copy of the production architecture;
-#    if your local CLADS-Net classes were renamed/changed, replace
-#    CLADSNet below with your local definition)
+#    if your local DPRASR-Net classes were renamed/changed, replace
+#    DPRASR_Net below with your local definition)
 # ----------------------------------------------------------------
 # The full model is imported from the production script so this ablation
 # can never drift from main.py (single source of truth).
-from main import DPRASR_Net as CLADSNet
+from main import DPRASR_Net
 
 
 # ----------------------------------------------------------------
@@ -352,7 +352,7 @@ def main():
         for i, s in enumerate(splits))
 
     configs = [
-        ("clads_full", CLADSNet, True),
+        ("dprasr_full", DPRASR_Net, True),
         ("unet_decoder", UNetDecoderNet, False),
     ]
     results = {}
@@ -374,7 +374,7 @@ def main():
         r"Decoder & Dice & IoU & ACC & Pre & Rec & HD95$\downarrow$ & ASSD$\downarrow$ & NSD$\uparrow$ \\",
         r"\hline",
     ]
-    disp = {"clads_full": r"Proposed fusion head (full)",
+    disp = {"dprasr_full": r"Proposed fusion head (full)",
             "unet_decoder": r"DenseNet-121 + U-Net decoder"}
     for tag, r in results.items():
         cells = [disp[tag]]

@@ -9,7 +9,7 @@ identical except the auxiliary deep-supervision weight:
   none     -- no deep supervision (w = 0)
   0.1 ...  -- fixed static weights, default sweep {0.1, 0.15, 0.2, 0.25, 0.3}
 
-Run (from CLADS-Net root, with boundary_metrics.py in the same folder):
+Run (from DPRASR-Net root, with boundary_metrics.py in the same folder):
   python static_weight_ablation.py --dataset BUSI     --data_dir /path/to/Dataset_BUSI_with_GT
   python static_weight_ablation.py --dataset UDIAT    --data_dir /path/to/UDIAT_Dataset_B
   python static_weight_ablation.py --dataset BUS_UCLM --data_dir "/path/to/BUS-UCLM ..."
@@ -59,7 +59,7 @@ def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0,
     return W_min + (W_max - W_min) / (1.0 + math.exp(-gamma * (dataset_size - mu)))
 
 
-from main import DPRASR_Net as CLADSNet
+from main import DPRASR_Net
 
 
 class HybridLoss(nn.Module):
@@ -171,7 +171,7 @@ def get_paths(data_dir, dataset):
 # ----------------------------------------------------------------
 def train_and_eval(weight_tag, ds_w, loaders, train_size, device, args):
     set_seed(args.seed)
-    model = CLADSNet().to(device)
+    model = DPRASR_Net().to(device)
     criterion = HybridLoss()
     optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=35, eta_min=1e-6)

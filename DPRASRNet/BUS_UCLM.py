@@ -132,7 +132,7 @@ def main():
     save_path = "best_bus_uclm.pth"
     data_dir = r"../../data/BUS-UCLM Breast ultrasound lesion segmentation dataset"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"🚀 Using device: {device } | 📐 Architecture: CLADS-net")
+    print(f"🚀 Using device: {device } | 📐 Architecture: DPRASR-Net")
 
     all_imgs, all_masks = get_dataset_paths(data_dir)
     total_size = len(all_imgs)
