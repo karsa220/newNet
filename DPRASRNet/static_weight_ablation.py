@@ -21,6 +21,7 @@ Output: per-weight test metrics (region + HD95/ASSD/NSD) and a LaTeX-ready table
 import argparse
 import math
 import os
+os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
 import random
 import sys
 
@@ -50,6 +51,7 @@ def set_seed(seed=42):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+    torch.use_deterministic_algorithms(True, warn_only=True)
 
 
 def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0,
@@ -178,6 +180,8 @@ def train_and_eval(weight_tag, ds_w, loaders, train_size, device, args):
 
     if weight_tag == "dynamic":
         ds_w = calculate_ds_weight(train_size)
+    elif weight_tag != "none":
+        ds_w = float(weight_tag)
     print(f"  [DS={weight_tag}] aux weight = {ds_w:.4f}")
 
     train_loader, val_loader, test_loader = loaders
