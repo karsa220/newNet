@@ -59,6 +59,9 @@ class OfficialSwinUNetWrapper(nn.Module):
 
         if os.path.exists(config.MODEL.PRETRAIN_CKPT):
             self.model.load_from(config)
+            print(
+                f"✅ Loaded ImageNet-1K Swin-T weights: {config.MODEL.PRETRAIN_CKPT}"
+            )
         else:
             print(
                 f"⚠️ Pretrained weights not found{config .MODEL .PRETRAIN_CKPT }, training will be started from scratch with random initialization."
