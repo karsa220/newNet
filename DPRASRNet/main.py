@@ -63,8 +63,6 @@ class DPRCAB(nn.Module):
 
 # acssr: Adaptive Cross-Scale Soft Routing
 class AdaptiveCrossScaleSoftRouting(nn.Module):
-    """ACSSR: pixel-wise, scale-wise soft routing."""
-
     def __init__(self, channels, num_scales=5, reduction=4):
         super().__init__()
         self.num_scales = num_scales
