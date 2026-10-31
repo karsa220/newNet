@@ -192,11 +192,36 @@ class BUSDataset(Dataset):
         return TF.to_tensor(image), TF.to_tensor(mask)
 
 
+def _resolve_dir(data_dir, names):
+    """Find a directory at data_dir or up to two levels below that contains
+    every entry in `names` (case-insensitive). Returns (dir, child_map)."""
+    names = [n.lower() for n in names]
+
+    def child_map(d):
+        return {e.lower(): e for e in os.listdir(d)
+                if os.path.isdir(os.path.join(d, e))}
+
+    frontier = [(data_dir, 0)]
+    while frontier:
+        d, depth = frontier.pop(0)
+        cm = child_map(d)
+        if all(n in cm for n in names):
+            return d, cm
+        if depth < 2:
+            frontier.extend((os.path.join(d, v), depth + 1) for v in cm.values())
+    return None, {}
+
+
 def get_paths(data_dir, dataset):
     img_p, mask_p = [], []
     if dataset == "BUSI":  # Dataset_BUSI_with_GT/{benign,malignant}/*.png (+_mask.png)
+        base, cm = _resolve_dir(data_dir, ["benign", "malignant"])
+        if base is None:
+            base = data_dir
+            cm = {e.lower(): e for e in os.listdir(data_dir)}
+        print(f"  data root: {base}")
         for cat in ["benign", "malignant"]:
-            cat_dir = os.path.join(data_dir, cat)
+            cat_dir = os.path.join(base, cm.get(cat, cat))
             if not os.path.isdir(cat_dir):
                 continue
             for f in sorted(os.listdir(cat_dir)):
@@ -206,9 +231,14 @@ def get_paths(data_dir, dataset):
                         img_p.append(os.path.join(cat_dir, f))
                         mask_p.append(mp)
     elif dataset == "BUS_UCLM":  # {benign,malign}/*.png + masks/*.png (same filenames)
-        masks_dir = os.path.join(data_dir, "masks")
+        base, cm = _resolve_dir(data_dir, ["benign", "masks"])
+        if base is None:
+            base = data_dir
+            cm = {e.lower(): e for e in os.listdir(data_dir)}
+        print(f"  data root: {base}")
+        masks_dir = os.path.join(base, cm.get("masks", "masks"))
         for cat in ["benign", "malign"]:
-            cat_dir = os.path.join(data_dir, cat)
+            cat_dir = os.path.join(base, cm.get(cat, cat))
             if not os.path.isdir(cat_dir):
                 continue
             for f in sorted(os.listdir(cat_dir)):
@@ -217,8 +247,20 @@ def get_paths(data_dir, dataset):
                     if os.path.exists(mp):
                         img_p.append(os.path.join(cat_dir, f))
                         mask_p.append(mp)
-    else:  # UDIAT: original/ + GT/
-        img_dir, gt_dir = os.path.join(data_dir, "original"), os.path.join(data_dir, "GT")
+    else:  # UDIAT: original/ + GT/  (or images/ + masks/)
+        base, cm = _resolve_dir(data_dir, ["original", "gt"])
+        if base is not None:
+            img_key, gt_key = "original", "gt"
+        else:
+            base, cm = _resolve_dir(data_dir, ["images", "masks"])
+            if base is None:
+                raise FileNotFoundError(
+                    f"neither original/GT nor images/masks found under {data_dir}; "
+                    f"top-level entries: {os.listdir(data_dir)}")
+            img_key, gt_key = "images", "masks"
+        print(f"  data root: {base}")
+        img_dir = os.path.join(base, cm[img_key])
+        gt_dir = os.path.join(base, cm[gt_key])
         for f in sorted(os.listdir(img_dir)):
             if f.lower().endswith((".png", ".jpg", ".jpeg")):
                 mp = os.path.join(gt_dir, f)
