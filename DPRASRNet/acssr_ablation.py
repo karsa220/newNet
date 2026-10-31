@@ -417,9 +417,10 @@ def main():
     ]
     disp = {"sknet_select": r"SKNet select \cite{sknet}",
             "acssr_channel": r"ACSSR channel-wise (Eqs.~5--8)",
-            "acssr_pixel": r"ACSSR pixel-wise (released code)"}
+            "acssr_pixel": r"ACSSR pixel-wise (released code)",
+            "acssr_pixel_channel": r"ACSSR pixel-wise + GAP (ours)"}
     for fusion, rows in results.items():
-        cells = [disp[fusion]]
+        cells = [disp.get(fusion, fusion)]
         for k in keys:
             vals = [r[k] for r in rows if not math.isnan(r[k])]
             mu, sd = float(np.mean(vals)), float(np.std(vals))
