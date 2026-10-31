@@ -68,6 +68,9 @@ def parse_metrics(output):
         "acc": find(r"ACC\s*:?\s*([\d.]+)"),
         "precision": find(r"Pre(?:cision)?\s*:?\s*([\d.]+)"),
         "recall": find(r"Rec(?:all)?\s*:?\s*([\d.]+)"),
+        "hd95": find(r"HD95\s*:?\s*([\d.]+)"),
+        "assd": find(r"ASSD\s*:?\s*([\d.]+)"),
+        "nsd": find(r"NSD\s*:?\s*([\d.]+)"),
         "infer_ms": find(r"Average time consumption\s*:?\s*([\d.]+)\s*ms"),
         "fps": find(r"(?:F P S|FPS)\s*:?\s*([\d.]+)"),
     }
@@ -183,23 +186,27 @@ def run_stage(stage_name, record_name, file_idx):
     table_lines.append(
         f"Generation time:{datetime .now ().strftime ('%Y-%m-%d %H:%M:%S')}"
     )
-    table_lines.append("=" * 100)
+    table_lines.append("=" * 130)
     header = (
         f"{'Model':<16}{'Dice':<10}{'ACC':<10}{'Recall':<10}"
-        f"{'IoU':<10}{'Precision':<12}{'Reasoning ms':<10}{'FPS':<10}{'state':<14}"
+        f"{'IoU':<10}{'Precision':<12}{'HD95':<10}{'ASSD':<10}{'NSD':<10}"
+        f"{'Reasoning ms':<14}{'FPS':<10}{'state':<14}"
     )
     table_lines.append(header)
-    table_lines.append("-" * 100)
+    table_lines.append("-" * 130)
 
     for model, m, status in results:
         row = (
             f"{model :<16}{fmt (m .get ('dice')):<10}{fmt (m .get ('acc')):<10}"
             f"{fmt (m .get ('recall')):<10}{fmt (m .get ('iou')):<10}"
-            f"{fmt (m .get ('precision')):<12}{fmt (m .get ('infer_ms')):<10}"
+            f"{fmt (m .get ('precision')):<12}"
+            f"{fmt (m .get ('hd95')):<10}{fmt (m .get ('assd')):<10}"
+            f"{fmt (m .get ('nsd')):<10}"
+            f"{fmt (m .get ('infer_ms')):<14}"
             f"{fmt (m .get ('fps')):<10}{status :<14}"
         )
         table_lines.append(row)
-    table_lines.append("=" * 100 + "\n")
+    table_lines.append("=" * 130 + "\n")
 
     summary_text = "\n".join(table_lines)
 
