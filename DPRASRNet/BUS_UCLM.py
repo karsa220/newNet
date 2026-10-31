@@ -15,6 +15,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from main import DPRASR_Net, calculate_ds_weight
+from DPRASRNet.boundary_metrics import boundary_metrics_batch
 
 
 class HybridLoss(nn.Module):
@@ -146,6 +147,7 @@ def main():
     val_size = int(0.1 * total_size)
 
     # Instantiate a new model
+    print(f"[ACSSR] variant: {'pixel+GAP' if os.environ.get('ACSSR_GAP', '1') == '1' else 'pixel (no GAP)'}")
     model = DPRASR_Net(embed_dim=256).to(device)
 
     if MODE == "train":
@@ -254,6 +256,7 @@ def main():
     model.eval()
 
     test_res = {"dice": [], "iou": [], "acc": [], "pre": [], "rec": []}
+    bnd_res = {"hd95": [], "assd": [], "nsd": []}
     print("🔥 GPU warm-up (Warm-up) in progress...")
     dummy_input = torch.randn(1, 3, 256, 256).to(device)
     with torch.no_grad():
@@ -286,6 +289,10 @@ def main():
             for k in test_res.keys():
                 test_res[k].extend(metrics[k])
 
+            _b = boundary_metrics_batch(outputs, masks)
+            for _k in bnd_res:
+                bnd_res[_k].append(_b[_k])
+
     avg_time_per_image = (total_infer_time / total_samples) * 1000
     fps = 1.0 / (total_infer_time / total_samples)
     print("\n🏆 DPRASR-Net final test set results 🏆")
@@ -298,6 +305,9 @@ def main():
     print(f"⚡ Inference speed evaluation (Device:{device }) ⚡")
     print(f"⏱️Average time:{avg_time_per_image :.2f} ms / image")
     print(f"🚀 F P S    : {fps :.2f} frames / second")
+    print(
+        f"🔹 HD95     : {np.nanmean(bnd_res['hd95']):.4f} | ASSD: {np.nanmean(bnd_res['assd']):.4f} | NSD: {np.nanmean(bnd_res['nsd']):.4f}"
+    )
     print("=" * 50)
     return test_res
 

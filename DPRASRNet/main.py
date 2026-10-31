@@ -93,6 +93,9 @@ class AdaptiveCrossScaleSoftRouting(nn.Module):
         self.channels = channels
         mid_channels = max(1, (channels * num_scales) // reduction)
 
+        # ACSSR_GAP=0 -> original pixel-wise router (no global term)
+        # ACSSR_GAP=1 -> pixel-wise router + GAP context term (default)
+        self.use_gap = os.environ.get("ACSSR_GAP", "1") == "1"
         self.gap = nn.AdaptiveAvgPool2d(1)
         self.router = nn.Sequential(
             nn.Conv2d(channels * num_scales, mid_channels, kernel_size=1, bias=False),
@@ -105,7 +108,8 @@ class AdaptiveCrossScaleSoftRouting(nn.Module):
         B, C, H, W = features[0].shape
         concat_f = torch.cat(features, dim=1)
         attn_weights = self.router(concat_f)                          # (B, K*C, H, W)
-        attn_weights = attn_weights + self.router(self.gap(concat_f)) # + GAP context term
+        if self.use_gap:
+            attn_weights = attn_weights + self.router(self.gap(concat_f))  # + GAP context term
         attn_weights = attn_weights.view(B, self.num_scales, C, H, W)
         attn_weights = F.softmax(attn_weights, dim=1)
         stacked_f = torch.stack(features, dim=1)
@@ -341,6 +345,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=200)
     parser.add_argument("--batch_size", type=int, default=8)
     args = parser.parse_args()
+    print(f"[ACSSR] variant: {'pixel+GAP' if os.environ.get('ACSSR_GAP', '1') == '1' else 'pixel (no GAP)'}")
 
     set_seed(42)
     MODE = args.mode

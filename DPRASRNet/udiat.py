@@ -20,6 +20,7 @@ from seed.set_seed import set_seed
 
 from main import HybridLoss
 from main import calculate_metrics
+from DPRASRNet.boundary_metrics import boundary_metrics_batch
 
 
 # ==========================================
@@ -126,6 +127,7 @@ def main():
     total = len(all_imgs)
     train_size, v_size = int(0.8 * total), int(0.1 * total)
 
+    print(f"[ACSSR] variant: {'pixel+GAP' if os.environ.get('ACSSR_GAP', '1') == '1' else 'pixel (no GAP)'}")
     model = DPRASR_Net().to(device)
 
     if MODE == "train":
@@ -241,6 +243,7 @@ def main():
         torch.cuda.synchronize()
 
     test_res = {"dice": [], "iou": [], "acc": [], "pre": [], "rec": []}
+    bnd_res = {"hd95": [], "assd": [], "nsd": []}
     total_time, total_samples = 0.0, 0
 
     with torch.no_grad():
@@ -263,6 +266,10 @@ def main():
             for k in test_res:
                 test_res[k].extend(m[k])
 
+            _b = boundary_metrics_batch(outputs, masks)
+            for _k in bnd_res:
+                bnd_res[_k].append(_b[_k])
+
     print("\n🏆 DPRASR-Net (UDIAT) test set final results 🏆")
     print(
         f"🔹 Dice : {np .mean (test_res ['dice']):.4f} | IoU: {np .mean (test_res ['iou']):.4f}"
@@ -274,6 +281,9 @@ def main():
     print(f"⚡ Inference speed evaluation (Device:{device }) ⚡")
     print(
         f"⏱️Average time:{(total_time /total_samples )*1000 :.2f} ms/img | FPS: {1.0 /(total_time /total_samples ):.2f}"
+    )
+    print(
+        f"🔹 HD95 : {np.nanmean(bnd_res['hd95']):.4f} | ASSD: {np.nanmean(bnd_res['assd']):.4f} | NSD: {np.nanmean(bnd_res['nsd']):.4f}"
     )
     print("=" * 50)
 
