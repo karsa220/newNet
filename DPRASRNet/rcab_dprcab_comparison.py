@@ -18,6 +18,8 @@ from tqdm import tqdm
 # ==========================================
 import math
 
+from main import AdaptiveCrossScaleSoftRouting, DPRCAB, ChannelAdapter, DPRASR_Net
+
 
 def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0, W_min=0.15, W_max=0.45):
     """Use a generalized logistic function to calculate deep supervision weights based on the dataset size.
@@ -39,43 +41,6 @@ def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0, W_min=0.15, W_ma
     return weight
 
     # Dual-Pooling Residual Channel Attention Block
-
-
-class DPRCAB(nn.Module):
-    def __init__(self, in_channels):
-        super().__init__()
-
-        self.LConv = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, 3, padding=1, bias=False),
-            nn.BatchNorm2d(in_channels),
-            nn.LeakyReLU(negative_slope=0.01, inplace=True),
-            nn.Conv2d(in_channels, in_channels, 3, padding=1, bias=False),
-            nn.BatchNorm2d(in_channels),
-        )
-
-        # Optimization 2: Introducing double pooling (Average + Max)
-        self.gap = nn.AdaptiveAvgPool2d(1)
-        self.gmp = nn.AdaptiveMaxPool2d(1)
-
-        mid = max(in_channels // 4, 1)
-
-        # Channel Attention MLP
-        self.mlp = nn.Sequential(
-            nn.Conv2d(in_channels, mid, 1, bias=False),
-            nn.LeakyReLU(negative_slope=0.01, inplace=True),
-            nn.Conv2d(mid, in_channels, 1, bias=False),
-        )
-
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        identity = x
-        feat = self.LConv(x)
-        avg_att = self.mlp(self.gap(feat))
-        max_att = self.mlp(self.gmp(feat))
-        att = self.sigmoid(avg_att + max_att)
-        out = feat * att + identity
-        return out
 
 
 class RCAB(nn.Module):
@@ -103,48 +68,6 @@ class RCAB(nn.Module):
         return self.body(x) + x
 
         # acssr: Adaptive Cross-Scale Soft Routing
-
-
-class AdaptiveCrossScaleSoftRouting(nn.Module):
-    """ACSSR: pixel-wise soft routing with a global (GAP) context term."""
-
-    def __init__(self, channels, num_scales=5, reduction=4):
-        super().__init__()
-        self.num_scales = num_scales
-        self.channels = channels
-        mid_channels = max(1, (channels * num_scales) // reduction)
-
-        self.gap = nn.AdaptiveAvgPool2d(1)
-        self.router = nn.Sequential(
-            nn.Conv2d(channels * num_scales, mid_channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(mid_channels),
-            nn.GELU(),
-            nn.Conv2d(mid_channels, channels * num_scales, kernel_size=1, bias=False),
-        )
-
-    def forward(self, *features):
-        B, C, H, W = features[0].shape
-        concat_f = torch.cat(features, dim=1)
-        attn_weights = self.router(concat_f)                          # (B, K*C, H, W)
-        attn_weights = attn_weights + self.router(self.gap(concat_f)) # + GAP context term
-        attn_weights = attn_weights.view(B, self.num_scales, C, H, W)
-        attn_weights = F.softmax(attn_weights, dim=1)
-        stacked_f = torch.stack(features, dim=1)
-        fused_out = (stacked_f * attn_weights).sum(dim=1)
-        return fused_out
-
-
-class ChannelAdapter(nn.Module):
-    def __init__(self, input_dim, embed_dim):
-        super().__init__()
-        self.proj = nn.Linear(input_dim, embed_dim)
-
-    def forward(self, x):
-        B, C, H, W = x.shape
-        x = x.flatten(2).transpose(1, 2)
-        x = self.proj(x)
-        x = x.transpose(1, 2).reshape(B, -1, H, W)
-        return x
 
         # Dual-Pooling Residual Adaptive Soft-Routing Network
 

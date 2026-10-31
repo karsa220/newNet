@@ -51,6 +51,8 @@ from seed.set_seed import set_seed
 from DPRASRNet.fusion_variants import VARIANTS, build_fusion, count_params
 from DPRASRNet.boundary_metrics import boundary_metrics_batch
 
+from main import DPRCAB, ChannelAdapter, AdaptiveCrossScaleSoftRouting
+
 
 # ----------------------------------------------------------------
 # 1. Deep-supervision weight (identical to main.py)
@@ -65,43 +67,6 @@ def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0,
 # ----------------------------------------------------------------
 # 2. Shared building blocks (identical to main.py)
 # ----------------------------------------------------------------
-class DPRCAB(nn.Module):
-    def __init__(self, in_channels):
-        super().__init__()
-        self.LConv = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, 3, padding=1, bias=False),
-            nn.BatchNorm2d(in_channels),
-            nn.LeakyReLU(negative_slope=0.01, inplace=True),
-            nn.Conv2d(in_channels, in_channels, 3, padding=1, bias=False),
-            nn.BatchNorm2d(in_channels),
-        )
-        self.gap = nn.AdaptiveAvgPool2d(1)
-        self.gmp = nn.AdaptiveMaxPool2d(1)
-        mid = max(in_channels // 4, 1)
-        self.mlp = nn.Sequential(
-            nn.Conv2d(in_channels, mid, 1, bias=False),
-            nn.LeakyReLU(negative_slope=0.01, inplace=True),
-            nn.Conv2d(mid, in_channels, 1, bias=False),
-        )
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x):
-        identity = x
-        feat = self.LConv(x)
-        att = self.sigmoid(self.mlp(self.gap(feat)) + self.mlp(self.gmp(feat)))
-        return feat * att + identity
-
-
-class ChannelAdapter(nn.Module):
-    def __init__(self, input_dim, embed_dim):
-        super().__init__()
-        self.proj = nn.Linear(input_dim, embed_dim)
-
-    def forward(self, x):
-        B, C, H, W = x.shape
-        x = x.flatten(2).transpose(1, 2)
-        x = self.proj(x)
-        return x.transpose(1, 2).reshape(B, -1, H, W)
 
 
 # ----------------------------------------------------------------
