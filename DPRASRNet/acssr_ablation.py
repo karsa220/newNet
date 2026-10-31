@@ -378,7 +378,9 @@ def main():
     disp = {"sknet_select": r"SKNet select \cite{sknet}",
             "acssr_channel": r"ACSSR channel-wise (Eqs.~5--8)",
             "acssr_pixel": r"ACSSR pixel-wise (released code)",
-            "acssr_pixel_channel": r"ACSSR pixel-wise + GAP (ours)"}
+            "acssr_pixel_channel": r"ACSSR pixel-wise + GAP (shared router)",
+            "acssr_gap_only": r"ACSSR GAP-only (global routing)",
+            "acssr_pixel_gap_sep": r"ACSSR pixel-wise + GAP (separate branch)"}
     for fusion, rows in results.items():
         cells = [disp.get(fusion, fusion)]
         for k in keys:

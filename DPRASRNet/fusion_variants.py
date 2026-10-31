@@ -156,11 +156,75 @@ class ACSSRPixelChannelRouting(nn.Module):
 
 
 # ----------------------------------------------------------------------
+# V5: router applied to the GAP descriptor only
+#     -> spatially constant weights (same granularity as SKNet, cross-scale)
+# ----------------------------------------------------------------------
+class ACSSRGapOnlyRouting(nn.Module):
+    def __init__(self, channels, num_scales=5, reduction=4):
+        super().__init__()
+        self.num_scales = num_scales
+        self.channels = channels
+        mid = max(1, (channels * num_scales) // reduction)
+        self.gap = nn.AdaptiveAvgPool2d(1)
+        self.router = nn.Sequential(
+            nn.Conv2d(channels * num_scales, mid, kernel_size=1, bias=False),
+            nn.BatchNorm2d(mid),
+            nn.GELU(),
+            nn.Conv2d(mid, channels * num_scales, kernel_size=1, bias=False),
+        )
+
+    def forward(self, *features):
+        B, C, H, W = features[0].shape
+        concat_f = torch.cat(features, dim=1)
+        attn = self.router(self.gap(concat_f))           # (B, K*C, 1, 1)
+        attn = attn.reshape(B, self.num_scales, C, 1, 1)
+        attn = F.softmax(attn, dim=1)
+        stacked = torch.stack(features, dim=1)
+        return (stacked * attn).sum(dim=1)               # broadcast over H, W
+
+
+# ----------------------------------------------------------------------
+# V6: pixel router + a separate global branch
+#     (independent GAP router without the shared BatchNorm)
+# ----------------------------------------------------------------------
+class ACSSRPixelGapSepRouting(nn.Module):
+    def __init__(self, channels, num_scales=5, reduction=4):
+        super().__init__()
+        self.num_scales = num_scales
+        self.channels = channels
+        mid = max(1, (channels * num_scales) // reduction)
+
+        self.gap = nn.AdaptiveAvgPool2d(1)
+        self.pixel_router = nn.Sequential(
+            nn.Conv2d(channels * num_scales, mid, kernel_size=1, bias=False),
+            nn.BatchNorm2d(mid),
+            nn.GELU(),
+            nn.Conv2d(mid, channels * num_scales, kernel_size=1, bias=False),
+        )
+        self.gap_router = nn.Sequential(
+            nn.Conv2d(channels * num_scales, mid, kernel_size=1, bias=False),
+            nn.GELU(),
+            nn.Conv2d(mid, channels * num_scales, kernel_size=1, bias=False),
+        )
+
+    def forward(self, *features):
+        B, C, H, W = features[0].shape
+        concat_f = torch.cat(features, dim=1)
+        attn = self.pixel_router(concat_f) + self.gap_router(self.gap(concat_f))
+        attn = attn.view(B, self.num_scales, C, H, W)
+        attn = F.softmax(attn, dim=1)
+        stacked = torch.stack(features, dim=1)
+        return (stacked * attn).sum(dim=1)
+
+
+# ----------------------------------------------------------------------
 VARIANTS = {
     "sknet_select": SKNetSelectRouting,      # V1: baseline routing (SKNet)
     "acssr_channel": ACSSRChannelRouting,    # V2: paper equations (5)-(8)
     "acssr_pixel": ACSSRPixelRouting,        # V3: released-code version (before revision)
     "acssr_pixel_channel": ACSSRPixelChannelRouting,  # V4: hybrid (current main.py)
+    "acssr_gap_only": ACSSRGapOnlyRouting,            # V5: GAP descriptor only
+    "acssr_pixel_gap_sep": ACSSRPixelGapSepRouting,   # V6: pixel + separate GAP branch
 }
 
 
