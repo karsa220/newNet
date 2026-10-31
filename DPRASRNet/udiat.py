@@ -127,7 +127,6 @@ def main():
     total = len(all_imgs)
     train_size, v_size = int(0.8 * total), int(0.1 * total)
 
-    print(f"[ACSSR] variant: {'pixel+GAP' if os.environ.get('ACSSR_GAP', '1') == '1' else 'pixel (no GAP)'}")
     model = DPRASR_Net().to(device)
 
     if MODE == "train":
