@@ -236,9 +236,17 @@ def load_model(model_key, weight_p, img_size=None):
         # ---------- Preprocessing/Inference ----------
 
 
-def preprocess(img_pil, size):
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
+# Models whose training pipeline applies ImageNet normalization
+NORM_MODELS = {"unet", "DBFNet"}
+
+
+def preprocess(img_pil, size, model_key=None):
     img = img_pil.convert("RGB").resize((size, size))
     t = TF.to_tensor(img)
+    if model_key in NORM_MODELS:
+        t = TF.normalize(t, IMAGENET_MEAN, IMAGENET_STD)
     return t.unsqueeze(0).to(DEVICE)
 
 
@@ -433,7 +441,7 @@ def main():
             for row in all_rows:
                 if row["ds_key"] != ds_key:
                     continue
-                img_t = preprocess(row["img_pil"], size)
+                img_t = preprocess(row["img_pil"], size, m["key"])
                 pred = predict(model, m["key"], img_t)
                 pred_np = pred.squeeze().cpu().numpy()
                 pred_bin = (pred_np > 0.5).astype(np.uint8) * 255
