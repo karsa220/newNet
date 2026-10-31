@@ -8,6 +8,7 @@ Function:
   2. Console: Output all training logs and progress in real time (keep the output as is)
   3. Log file: The complete training log of each model is saved to logs/{stage}_{model}.log
   4. Final record file (record_*.txt): only records the summary table of all final models, and does not write the details of the intermediate process.
+  5. Combined file (record_ALL.txt): merges every finished stage table into a single file.
 
 Usage:
     python run_all.py # Run all three stages (BUS-UCLM -> udiat -> busi)
@@ -181,7 +182,7 @@ def run_stage(stage_name, record_name, file_idx):
 
         # Generate final summary table content
     table_lines = []
-    table_lines.append("=" * 100)
+    table_lines.append("=" * 130)
     table_lines.append(f"Training record summary table - data set:{stage_name }")
     table_lines.append(
         f"Generation time:{datetime .now ().strftime ('%Y-%m-%d %H:%M:%S')}"
@@ -219,6 +220,26 @@ def run_stage(stage_name, record_name, file_idx):
     )
     sys.stdout.flush()
 
+
+def write_combined_record():
+    """Merge all finished per-stage record tables into record_ALL.txt."""
+    parts = []
+    missing = []
+    for stage_name, record_name, _ in STAGES:
+        p = DPRASR / record_name
+        if p.exists():
+            parts.append(p.read_text(encoding="utf-8").rstrip())
+        else:
+            missing.append(record_name)
+    if not parts:
+        return
+    out = DPRASR / "record_ALL.txt"
+    out.write_text("\n\n".join(parts) + "\n", encoding="utf-8")
+    print(f"\nCombined summary -> {out}")
+    if missing:
+        print(f"  (stages not run yet: {', '.join(missing)})")
+    sys.stdout.flush()
+
     # -------------------------------------------------------------------
     # main entrance
     # -------------------------------------------------------------------
@@ -248,6 +269,8 @@ def main():
 
     for stage_name, record_name, file_idx in stages:
         run_stage(stage_name, record_name, file_idx)
+
+    write_combined_record()
 
     print(f"\n{'='*70 }")
     print("All done. Log files:")
