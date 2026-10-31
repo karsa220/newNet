@@ -258,7 +258,7 @@ Output: `decoder_ablation_results_<dataset>.txt`.
 ### Deep-supervision weight ablation — `DPRASRNet/static_weight_ablation.py`
 
 No deep supervision vs. fixed deep-supervision weights (the proposed model uses a
-fixed `DS_W=0.1`, set via the `DS_W` environment variable).
+fixed `DS_W=0.2`, set via the `DS_W` environment variable).
 
 ```bash
 python DPRASRNet/static_weight_ablation.py --dataset BUSI --data_dir ../data/Dataset_BUSI_with_GT \

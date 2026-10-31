@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from boundary_metrics import boundary_metrics_batch
 
 # Fixed deep-supervision weight (static; dataset-size adaptation was removed)
-DS_W = float(os.environ.get("DS_W", "0.1"))
+DS_W = float(os.environ.get("DS_W", "0.2"))
 
     # Dual-Pooling Residual Channel Attention Block
 

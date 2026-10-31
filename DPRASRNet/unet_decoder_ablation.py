@@ -64,7 +64,7 @@ def set_seed(seed=42):
 # ----------------------------------------------------------------
 # The full model is imported from the production script so this ablation
 # can never drift from main.py (single source of truth).
-from main import DPRASR_Net
+from main import DPRASR_Net, DS_W
 
 
 # ----------------------------------------------------------------
@@ -237,7 +237,7 @@ def train_and_eval(tag, model_fn, use_ds, loaders, train_size, device, args):
     criterion = HybridLoss()
     optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=35, eta_min=1e-6)
-    ds_w = 0.1 if use_ds else 0.0
+    ds_w = DS_W if use_ds else 0.0
     print(f"  [{tag}] ds_weight = {ds_w:.4f}")
 
     train_loader, val_loader, test_loader = loaders
