@@ -38,6 +38,12 @@ MARKER = "@@BOUNDARY@@"
 
 
 def _run(target):
+    # The target script may do `from main import ...`; that only resolves when
+    # its own directory is on sys.path (normally provided by `python script.py`).
+    target_dir = os.path.dirname(os.path.abspath(target))
+    if target_dir not in sys.path:
+        sys.path.insert(0, target_dir)
+
     with open(target, encoding="utf-8") as f:
         src = f.read()
 
