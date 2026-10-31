@@ -2,10 +2,10 @@
 """visualize_comparison.py
 ============================================================
 Generate segmentation black and white mask comparison images of multiple models on 2 data sets.
-Layout: 4 rows × 10 columns (number of dynamically adapted models)
+Layout: 4 rows × 11 columns (number of dynamically adapted models)
   - 4 rows: 2 ultrasound images from each of the 2 data sets (BUSI/UDIAT)
-  - 10 columns: original image | GT | DPRASRNet (green title, ours) | 7 comparison models
-        (Swin-UNet / DBF-Net / HiFormer / MISSFormer / MK-UNet / CMU-Net / UNet++)
+  - 11 columns: original image | GT | DPRASRNet (green title, ours) | 8 comparison models
+        (UNet / Swin-UNet / DBF-Net / HiFormer / MISSFormer / MK-UNet / CMU-Net / UNet++)
 
 Usage:
     python visualize_comparison.py
@@ -94,9 +94,10 @@ DATASETS = {
     },
 }
 
-# ---------- Model configuration (column order: DPRASRNet column 3, the remaining 7 comparisons) ----------
+# ---------- Model configuration (column order: DPRASRNet column 3, the remaining 8 comparisons) ----------
 MODELS = [
     {"key": "DPRASRNet", "name": "DPRASR-Net", "ours": True, "dir": "DPRASRNet"},
+    {"key": "unet", "name": "UNet", "ours": False, "dir": "unet"},
     {"key": "swinunet", "name": "Swin-UNet", "ours": False, "dir": "swinunet"},
     {"key": "DBFNet", "name": "DBF-Net", "ours": False, "dir": "DBFNet"},
     {"key": "hiformer", "name": "HiFormer", "ours": False, "dir": "hiformer"},
@@ -147,15 +148,13 @@ def load_model(model_key, weight_p, img_size=None):
 
                     model = DPRASR_Net(embed_dim=256)
 
-        elif model_key == "segformer":
-            with model_import_context(DPRASR / "segformer"):
+        elif model_key == "unet":
+            with model_import_context(DPRASR / "unet"):
                 try:
-                    from segformer.main import SegFormerWrapper
+                    from main import UNet
                 except ImportError:
-                    from main import SegFormerWrapper
-                model = SegFormerWrapper(
-                    pretrained_model="nvidia/mit-b0", num_classes=1
-                )
+                    from unet.main import UNet
+                model = UNet(n_channels=3, n_classes=1)
 
         elif model_key == "swinunet":
             with model_import_context(DPRASR / "swinunet"):
