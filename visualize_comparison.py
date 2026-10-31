@@ -5,7 +5,7 @@ Generate segmentation black and white mask comparison images of multiple models 
 Layout: 4 rows × 11 columns (number of dynamically adapted models)
   - 4 rows: 2 ultrasound images from each of the 2 data sets (BUSI/UDIAT)
   - 11 columns: original image | GT | DPRASRNet (green title, ours) | 8 comparison models
-        (SegFormer / Swin-UNet / TransUNet / HiFormer / MISSFormer / MK-UNet / CMU-Net / UNet++)
+        (SegFormer / Swin-UNet / DBF-Net / HiFormer / MISSFormer / MK-UNet / CMU-Net / UNet++)
 
 Usage:
     python visualize_comparison.py
@@ -99,7 +99,7 @@ MODELS = [
     {"key": "DPRASRNet", "name": "DPRASR-Net", "ours": True, "dir": "DPRASRNet"},
     {"key": "segformer", "name": "SegFormer", "ours": False, "dir": "segformer"},
     {"key": "swinunet", "name": "Swin-UNet", "ours": False, "dir": "swinunet"},
-    {"key": "transunet", "name": "TransUNet", "ours": False, "dir": "transunet"},
+    {"key": "DBFNet", "name": "DBF-Net", "ours": False, "dir": "DBFNet"},
     {"key": "hiformer", "name": "HiFormer", "ours": False, "dir": "hiformer"},
     {"key": "missformer", "name": "MISSFormer", "ours": False, "dir": "missformer"},
     {"key": "MKUnet", "name": "MK-UNet", "ours": False, "dir": "MKUnet"},
@@ -167,36 +167,13 @@ def load_model(model_key, weight_p, img_size=None):
                     from main import OfficialSwinUNetWrapper
                 model = OfficialSwinUNetWrapper(img_size=224, num_classes=1)
 
-        elif model_key == "transunet":
-            with model_import_context(DPRASR / "transunet"):
+        elif model_key == "DBFNet":
+            with model_import_context(DPRASR / "DBFNet"):
                 try:
-                    from transunet.main import TransUNetWrapper
-
-                    model = TransUNetWrapper(img_size=img_size or 224, num_classes=1)
+                    from DBFNet.main import DBFNet
                 except ImportError:
-                    try:
-                        from networks.vit_seg_modeling import (
-                            VisionTransformer as ViT_seg,
-                        )
-                        from networks.vit_seg_modeling import CONFIGS
-
-                        config_vit = CONFIGS["R50-ViT-B_16"]
-                        config_vit.n_classes = 1
-                        config_vit.n_skip = 3
-                        if img_size:
-                            config_vit.patches.grid = (
-                                int(img_size / 16),
-                                int(img_size / 16),
-                            )
-                        model = ViT_seg(
-                            config_vit, img_size=img_size or 224, num_classes=1
-                        )
-                    except ImportError:
-                        from main import TransUNetWrapper
-
-                        model = TransUNetWrapper(
-                            img_size=img_size or 224, num_classes=1
-                        )
+                    from main import DBFNet
+                model = DBFNet(in_channels=3, num_classes=1)
 
         elif model_key == "hiformer":
             with model_import_context(DPRASR / "hiformer"):
@@ -274,7 +251,7 @@ def predict(model, model_key, img_tensor):
         out = out[0]
 
         # Return raw logits to a model that requires manual sigmoid
-    if model_key in ("hiformer", "MKUnet", "CMUNet", "transunet"):
+    if model_key in ("hiformer", "MKUnet", "CMUNet"):
         out = torch.sigmoid(out)
 
     return out

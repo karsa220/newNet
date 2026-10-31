@@ -9,7 +9,10 @@ from scipy.ndimage import zoom
 import seaborn as sns
 from PIL import Image
 import matplotlib.pyplot as plt
-from segmentation_mask_overlay import overlay_masks
+try:  # optional: only needed by the 3D volume overlay helpers
+    from segmentation_mask_overlay import overlay_masks
+except ImportError:
+    overlay_masks = None
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
 from matplotlib.colors import ListedColormap
@@ -422,6 +425,11 @@ def fig_to_numpy(fig):
 def make_overlay_rgb(
     image, gt_mask, pred_mask, class_names, palette, alpha_gt=0.3, alpha_pred=0.6
 ):
+    if overlay_masks is None:
+        raise ImportError(
+            "segmentation_mask_overlay is not installed; "
+            "pip install segmentation_mask_overlay to use the overlay helpers"
+        )
     # 1) GT overlay
     pil_gt = overlay_masks(
         image,
