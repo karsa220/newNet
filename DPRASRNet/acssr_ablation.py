@@ -288,36 +288,39 @@ def train_and_eval(fusion, seed, loaders, device, train_size, args):
     save_path = os.path.join(args.out_dir, f"best_{args.dataset}_{fusion}_seed{seed}.pth")
     best_val_dice, patience, no_improve = 0.0, 10, 0
 
-    for epoch in range(args.epochs):
-        model.train()
-        for images, masks in tqdm(train_loader,
-                                  desc=f"[{fusion}|seed{seed}] ep{epoch + 1}/{args.epochs}",
-                                  leave=False):
-            images, masks = images.to(device), masks.to(device)
-            optimizer.zero_grad()
-            out, o0, o1, o2, o3 = model(images)
-            loss = criterion(out, masks) + ds_weight * (
-                criterion(o0, masks) + criterion(o1, masks)
-                + criterion(o2, masks) + criterion(o3, masks))
-            loss.backward()
-            optimizer.step()
+    if args.reuse and os.path.exists(save_path):
+        print(f"  [reuse] {os.path.basename(save_path)} found -> skip training")
+    else:
+        for epoch in range(args.epochs):
+            model.train()
+            for images, masks in tqdm(train_loader,
+                                      desc=f"[{fusion}|seed{seed}] ep{epoch + 1}/{args.epochs}",
+                                      leave=False):
+                images, masks = images.to(device), masks.to(device)
+                optimizer.zero_grad()
+                out, o0, o1, o2, o3 = model(images)
+                loss = criterion(out, masks) + ds_weight * (
+                    criterion(o0, masks) + criterion(o1, masks)
+                    + criterion(o2, masks) + criterion(o3, masks))
+                loss.backward()
+                optimizer.step()
 
-        model.eval()
-        val_dices = []
-        with torch.no_grad():
-            for images, masks in val_loader:
-                out = model(images.to(device))
-                val_dices.extend(calculate_region_metrics(out, masks.to(device))["dice"])
-        scheduler.step()
+            model.eval()
+            val_dices = []
+            with torch.no_grad():
+                for images, masks in val_loader:
+                    out = model(images.to(device))
+                    val_dices.extend(calculate_region_metrics(out, masks.to(device))["dice"])
+            scheduler.step()
 
-        if np.mean(val_dices) > best_val_dice:
-            best_val_dice = np.mean(val_dices)
-            torch.save(model.state_dict(), save_path)
-            no_improve = 0
-        else:
-            no_improve += 1
-            if no_improve >= patience:
-                break
+            if np.mean(val_dices) > best_val_dice:
+                best_val_dice = np.mean(val_dices)
+                torch.save(model.state_dict(), save_path)
+                no_improve = 0
+            else:
+                no_improve += 1
+                if no_improve >= patience:
+                    break
 
     # ----- test -----
     model.load_state_dict(torch.load(save_path, map_location=device))
@@ -363,6 +366,9 @@ def main():
                     default=list(VARIANTS.keys()),
                     help="routing variants to evaluate (subset of: "
                          + ", ".join(VARIANTS.keys()) + ")")
+    ap.add_argument("--reuse", action="store_true",
+                    help="reuse best_<dataset>_<variant>_seed<seed>.pth in --out_dir "
+                         "instead of training (test-only evaluation)")
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
 
