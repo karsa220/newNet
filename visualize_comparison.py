@@ -2,14 +2,14 @@
 """visualize_comparison.py
 ============================================================
 Generate segmentation black and white mask comparison images of multiple models on 2 data sets.
-Layout: 4 rows × 10 columns (number of dynamically adapted models)
-  - 4 rows: 2 ultrasound images from each of the 2 data sets (BUSI/UDIAT)
+Layout: two separate figures, one per data set (BUSI and UDIAT)
+  - 4 rows: 4 ultrasound images per data set
   - 10 columns: original image | GT | DPRASRNet (green title, ours) | 7 comparison models
         (UNet / DBF-Net / HiFormer / MISSFormer / MK-UNet / CMU-Net / UNet++)
 
 Usage:
     python visualize_comparison.py
-    python visualize_comparison.py --n 3 # Take 3 images from each data set (then 6 rows)
+    python visualize_comparison.py --n 3 # Take 3 images per data set (then 3 rows per figure)
     python visualize_comparison.py --seed 100 # Change a group of random pictures
     python visualize_comparison.py --out cmp.png"""
 
@@ -370,11 +370,14 @@ def main():
     ap.add_argument(
         "--n",
         type=int,
-        default=2,
-        help="How many pictures are taken from each data set (default 2)",
+        default=4,
+        help="How many pictures are taken from each data set (default 4)",
     )
     ap.add_argument(
-        "--out", type=str, default="comparison.png", help="Output file name"
+        "--out",
+        type=str,
+        default="comparison.png",
+        help="Output base file name; one <stem>_<dataset>.png is written per data set",
     )
     ap.add_argument(
         "--seed",
@@ -388,7 +391,8 @@ def main():
 
     print(f"DEVICE: {DEVICE } | DPRASR: {DPRASR }")
     print(
-        f"DATA: {DATA }| Taken from each data set{args .n }Zhang | Seed:{args .seed }| Output:{args .out }"
+        f"DATA: {DATA }| Taken from each data set{args .n }Zhang | Seed:{args .seed }"
+        f"| Output:{Path(args .out ).stem }_<dataset>.png"
     )
 
     # 1. Select pictures
@@ -443,8 +447,13 @@ def main():
             del model
             torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
-            # 3. Draw a picture
-    draw_grid(all_rows, args.out)
+            # 3. Draw one figure per data set
+    for ds_key in ["busi", "udiat"]:
+        rows = [r for r in all_rows if r["ds_key"] == ds_key]
+        if not rows:
+            continue
+        out_path = Path(f"{Path(args.out).stem}_{ds_key}.png")
+        draw_grid(rows, out_path)
 
 
 if __name__ == "__main__":
