@@ -21,24 +21,6 @@ from main import AdaptiveCrossScaleSoftRouting, DPRCAB, ChannelAdapter, DPRASR_N
 # ==========================================
 # 1. Dynamic deep supervision weight calculation (dprcab)
 # ==========================================
-def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0, W_min=0.15, W_max=0.30):
-    """Use a generalized logistic function to calculate deep supervision weights based on the dataset size.
-    Advantages:
-    1. Boundedness: No matter how big or small the dataset_size is, the weight is always strictly limited to (W_min, W_max).
-    2. Smoothness: smooth transition to avoid sudden changes in linear functions at the boundary.
-    """
-    # 1. Calculate the inflection point mu (i.e. the midpoint of N_min and N_max)
-    mu = (N_min + N_max) / 2.0
-
-    # 2. Calculate growth rate gamma
-    # We hope that at N_max, the function value reaches 95% of the transition completion of the upper bound
-    # Mathematical derivation: 1 / (1 + exp(-gamma * (N_max - mu))) = 0.95 => gamma = ln(19) / (N_max - mu)
-    gamma = math.log(19) / (N_max - mu)
-
-    # 3. Calculate logistic mapping weight
-    weight = W_min + (W_max - W_min) / (1.0 + math.exp(-gamma * (dataset_size - mu)))
-
-    return weight
 
     # ==========================================
     # 2. Definition of core network components
@@ -313,7 +295,7 @@ def train_and_eval_variant(
     )
     print("=" * 60)
 
-    ds_weight = calculate_ds_weight(train_size)
+    ds_weight = 0.1
 
     model = DPRASR_Net_Ablation(
         embed_dim=256, use_dprcab=use_dprcab, use_acssr=use_acssr, use_rcab=use_rcab

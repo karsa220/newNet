@@ -9,7 +9,7 @@ Two configurations, everything else identical (encoder, ImageNet init, split,
 resolution, augmentation, loss, optimizer, LR schedule, early stopping, seed):
 
   dprasr_full     -- the full model (DPRCAB + ChannelAdapter + ACSSR fusion +
-                    aux deep-supervision heads, dynamic DS weight), identical
+                    aux deep-supervision heads, fixed DS weight w=0.1), identical
                     to the production main.py.
   unet_decoder   -- DenseNet-121 encoder + STANDARD U-Net decoder (bilinear up
                     + concat skip + double conv), NO proposed modules, NO aux
@@ -55,13 +55,6 @@ def set_seed(seed=42):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-
-def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0,
-                        W_min=0.15, W_max=0.30):
-    mu = (N_min + N_max) / 2.0
-    gamma = math.log(19) / (N_max - mu)
-    return W_min + (W_max - W_min) / (1.0 + math.exp(-gamma * (dataset_size - mu)))
 
 
 # ----------------------------------------------------------------
@@ -244,7 +237,7 @@ def train_and_eval(tag, model_fn, use_ds, loaders, train_size, device, args):
     criterion = HybridLoss()
     optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=35, eta_min=1e-6)
-    ds_w = calculate_ds_weight(train_size) if use_ds else 0.0
+    ds_w = 0.1 if use_ds else 0.0
     print(f"  [{tag}] ds_weight = {ds_w:.4f}")
 
     train_loader, val_loader, test_loader = loaders

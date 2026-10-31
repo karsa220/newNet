@@ -1,11 +1,10 @@
 """
-Ablation: DSADS dynamic deep-supervision weight vs. static weights vs. no DS.
+Ablation: static deep-supervision weight vs. no deep supervision.
 =============================================================================
 
 Trains the FULL model (DPRCAB + ACSSR + aux heads) repeatedly with everything
 identical except the auxiliary deep-supervision weight:
 
-  dynamic  -- calculate_ds_weight(train_size), the proposed DSADS (logistic)
   none     -- no deep supervision (w = 0)
   0.1 ...  -- fixed static weights, default sweep {0.1, 0.15, 0.2, 0.25, 0.3}
 
@@ -13,7 +12,7 @@ Run (from DPRASR-Net root, with boundary_metrics.py in the same folder):
   python static_weight_ablation.py --dataset BUSI     --data_dir /path/to/Dataset_BUSI_with_GT
   python static_weight_ablation.py --dataset UDIAT    --data_dir /path/to/UDIAT_Dataset_B
   python static_weight_ablation.py --dataset BUS_UCLM --data_dir "/path/to/BUS-UCLM ..."
-  python static_weight_ablation.py --dataset BUSI --data_dir ... --weights dynamic 0.1 0.2 0.3
+  python static_weight_ablation.py --dataset BUSI --data_dir ... --weights 0.1 0.2 0.3
 
 Output: per-weight test metrics (region + HD95/ASSD/NSD) and a LaTeX-ready table.
 """
@@ -41,7 +40,7 @@ from boundary_metrics import boundary_metrics_batch
 
 
 # ----------------------------------------------------------------
-# 0. Seed & dynamic DS weight (identical to production main.py)
+# 0. Seed (identical to production main.py)
 # ----------------------------------------------------------------
 def set_seed(seed=42):
     random.seed(seed)
@@ -52,13 +51,6 @@ def set_seed(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.use_deterministic_algorithms(True, warn_only=True)
-
-
-def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0,
-                        W_min=0.15, W_max=0.30):
-    mu = (N_min + N_max) / 2.0
-    gamma = math.log(19) / (N_max - mu)
-    return W_min + (W_max - W_min) / (1.0 + math.exp(-gamma * (dataset_size - mu)))
 
 
 from main import DPRASR_Net
@@ -178,9 +170,7 @@ def train_and_eval(weight_tag, ds_w, loaders, train_size, device, args):
     optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=35, eta_min=1e-6)
 
-    if weight_tag == "dynamic":
-        ds_w = calculate_ds_weight(train_size)
-    elif weight_tag != "none":
+    if weight_tag != "none":
         ds_w = float(weight_tag)
     print(f"  [DS={weight_tag}] aux weight = {ds_w:.4f}")
 
@@ -255,8 +245,8 @@ def main():
     ap.add_argument("--dataset", choices=["BUSI", "UDIAT", "BUS_UCLM"], default="BUSI")
     ap.add_argument("--data_dir", required=True)
     ap.add_argument("--weights", nargs="+",
-                    default=["dynamic", "none", "0.1", "0.15", "0.2", "0.25", "0.3"],
-                    help="tokens: 'dynamic', 'none', or numeric static weights")
+                    default=["none", "0.1", "0.2", "0.3"],
+                    help="tokens: 'none' or numeric static weights")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--batch_size", type=int, default=8)
@@ -285,7 +275,7 @@ def main():
 
     results = {}
     for tag in args.weights:
-        if tag not in ("dynamic", "none"):
+        if tag != "none":
             try:
                 float(tag)
             except ValueError:
@@ -299,9 +289,8 @@ def main():
     keys = ["Dice", "IoU", "ACC", "Pre", "Rec", "HD95", "ASSD", "NSD"]
     lines = [
         r"\begin{table}[!t]", r"\centering",
-        r"\caption{Deep-supervision weighting ablation on " + args.dataset + r": dynamic "
-        r"(dataset-size-aware logistic) vs. static weights vs. no deep supervision "
-        r"(identical split, protocol, and seed " + str(args.seed) + r").}",
+        r"\caption{Effect of the deep-supervision weight on " + args.dataset
+        + r" (identical split, protocol, and seed " + str(args.seed) + r").}",
         r"\label{tab:ds_weight_ablation}",
         r"\begin{tabular}{l|ccccc|ccc}", r"\hline",
         r"DS weight & Dice & IoU & ACC & Pre & Rec & HD95$\downarrow$ & ASSD$\downarrow$ & NSD$\uparrow$ \\",
@@ -309,8 +298,6 @@ def main():
     ]
 
     def disp(tag):
-        if tag == "dynamic":
-            return r"Dynamic, dataset-size-aware (proposed)"
         if tag == "none":
             return r"w/o deep supervision"
         return rf"Static $w={tag}$"

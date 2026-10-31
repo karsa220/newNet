@@ -32,13 +32,6 @@ def set_seed(seed=42):
     # 1. Deep supervision weight calculation
     # ==========================================
 
-
-def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0, W_min=0.15, W_max=0.30):
-    mu = (N_min + N_max) / 2.0
-    gamma = math.log(19) / (N_max - mu)
-    weight = W_min + (W_max - W_min) / (1.0 + math.exp(-gamma * (dataset_size - mu)))
-    return weight
-
     # ==========================================
     # 2. Network structure definition (DPRASR-Net)
     # ==========================================
@@ -192,7 +185,6 @@ def main():
     DATASET = "BUSI"  # "BUSI" | "UDIAT"
 
     # 🔥 Ablation Experiment Options 🔥
-    # "dynamic": dynamically calculate deep supervision weights
     # "static" : static weight (fixed to 0.2)
     # "none" : no depth supervision (weight is 0)
     SUPERVISION_MODE = "none"
@@ -229,19 +221,14 @@ def main():
     # ------------------------------------------
     # Determine ds_weight based on ablation experiment configuration
     # ------------------------------------------
-    if SUPERVISION_MODE == "dynamic":
-        ds_weight = calculate_ds_weight(train_size)
-        print(
-            f"🎯 DS Weight [Dynamic]: {ds_weight :.4f} (Training Size = {train_size })"
-        )
-    elif SUPERVISION_MODE == "static":
+    if SUPERVISION_MODE == "static":
         ds_weight = 0.2
         print(f"🎯 DS Weight [Static]: {ds_weight :.4f}")
     elif SUPERVISION_MODE == "none":
         ds_weight = 0.0
         print(f"🎯 DS Weight [None]: {ds_weight :.4f} (Deep Supervision Disabled)")
     else:
-        raise ValueError("SUPERVISION_MODE must be 'dynamic', 'static', or 'none'")
+        raise ValueError("SUPERVISION_MODE must be 'static' or 'none'")
 
     model = DPRASR_Net(embed_dim=256).to(device)
 

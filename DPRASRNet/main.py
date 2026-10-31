@@ -18,30 +18,8 @@ from tqdm import tqdm
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from boundary_metrics import boundary_metrics_batch
 
-# ==========================================
-# Innovation: Dynamic deep supervision weight calculation with data set size awareness
-# ==========================================
-import math
-
-
-def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0, W_min=0.15, W_max=0.30):
-    """Use a generalized logistic function to calculate deep supervision weights based on the dataset size.
-    Advantages:
-    1. Boundedness: No matter how big or small the dataset_size is, the weight is always strictly limited to (W_min, W_max).
-    2. Smoothness: smooth transition to avoid sudden changes in linear functions at the boundary.
-    """
-    # 1. Calculate the inflection point mu (i.e. the midpoint of N_min and N_max)
-    mu = (N_min + N_max) / 2.0
-
-    # 2. Calculate growth rate gamma
-    # We hope that at N_max, the function value reaches 95% of the transition completion of the upper bound
-    # Mathematical derivation: 1 / (1 + exp(-gamma * (N_max - mu))) = 0.95 => gamma = ln(19) / (N_max - mu)
-    gamma = math.log(19) / (N_max - mu)
-
-    # 3. Calculate logistic mapping weight
-    weight = W_min + (W_max - W_min) / (1.0 + math.exp(-gamma * (dataset_size - mu)))
-
-    return weight
+# Fixed deep-supervision weight (static; dataset-size adaptation was removed)
+DS_W = float(os.environ.get("DS_W", "0.1"))
 
     # Dual-Pooling Residual Channel Attention Block
 
@@ -370,13 +348,9 @@ def main():
     train_size = int(0.8 * total_size)
     val_size = int(0.1 * total_size)
 
-    # ==========================================
-    # 🌟 Innovative application: dynamically calculate the current depth supervision weight
-    # ==========================================
-    dynamic_ds_weight = calculate_ds_weight(train_size)
-    print(
-        f"🎯 DSADDS: Auto-adjusted Deep Supervision Weight = {dynamic_ds_weight :.4f} (Training Size = {train_size })"
-    )
+    # Fixed deep-supervision weight (static)
+    ds_weight = DS_W
+    print(f"⚖️ Deep Supervision Weight (fixed) = {ds_weight:.4f}")
 
     model = DPRASR_Net(embed_dim=256).to(device)
 
@@ -416,7 +390,7 @@ def main():
                 out, out0, out1, out2, out3 = model(images)
                 loss_main = criterion(out, masks)
 
-                loss_aux = dynamic_ds_weight * (
+                loss_aux = ds_weight * (
                     criterion(out0, masks)
                     + criterion(out1, masks)
                     + criterion(out2, masks)

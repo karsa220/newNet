@@ -14,7 +14,7 @@ import torchvision.transforms.functional as TF
 from PIL import Image
 from tqdm import tqdm
 
-from main import DPRASR_Net, calculate_ds_weight
+from main import DPRASR_Net, DS_W
 from DPRASRNet.boundary_metrics import boundary_metrics_batch
 
 
@@ -164,10 +164,8 @@ def main():
             ),
             batch_size=8,
         )
-        dynamic_ds_weight = calculate_ds_weight(train_size)
-        print(
-            f"🎯 DSADDS: Auto-adjusted Deep Supervision Weight = {dynamic_ds_weight :.4f} (Training Size = {train_size })"
-        )
+        ds_weight = DS_W
+        print(f"⚖️ Deep Supervision Weight (fixed) = {ds_weight:.4f}")
 
         criterion = HybridLoss()
         optimizer = optim.AdamW(
@@ -192,7 +190,7 @@ def main():
                 # new output structure
                 out, out0, out1, out2, out3 = model(images)
                 loss_main = criterion(out, masks)
-                loss_aux = dynamic_ds_weight * (
+                loss_aux = ds_weight * (
                     criterion(out0, masks)
                     + criterion(out1, masks)
                     + criterion(out2, masks)

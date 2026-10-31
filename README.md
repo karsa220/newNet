@@ -229,11 +229,12 @@ Output: `decoder_ablation_results_<dataset>.txt`.
 
 ### Deep-supervision weight ablation — `DPRASRNet/static_weight_ablation.py`
 
-Dynamic dataset-size-aware weights (DSADS) vs. no deep supervision vs. fixed weights.
+No deep supervision vs. fixed deep-supervision weights (the proposed model uses a
+fixed `DS_W=0.1`, set via the `DS_W` environment variable).
 
 ```bash
 python DPRASRNet/static_weight_ablation.py --dataset BUSI --data_dir ../data/Dataset_BUSI_with_GT \
-       --weights dynamic 0.1 0.15 0.2 0.25 0.3
+       --weights none 0.1 0.2 0.3
 ```
 
 Output: `ds_weight_ablation_results_<dataset>.txt`.

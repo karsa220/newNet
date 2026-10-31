@@ -57,11 +57,6 @@ from main import DPRCAB, ChannelAdapter, AdaptiveCrossScaleSoftRouting
 # ----------------------------------------------------------------
 # 1. Deep-supervision weight (identical to main.py)
 # ----------------------------------------------------------------
-def calculate_ds_weight(dataset_size, N_min=130.0, N_max=624.0,
-                        W_min=0.15, W_max=0.30):
-    mu = (N_min + N_max) / 2.0
-    gamma = math.log(19) / (N_max - mu)
-    return W_min + (W_max - W_min) / (1.0 + math.exp(-gamma * (dataset_size - mu)))
 
 
 # ----------------------------------------------------------------
@@ -241,7 +236,7 @@ def get_paths(data_dir, dataset):
 # ----------------------------------------------------------------
 def train_and_eval(fusion, seed, loaders, device, train_size, args):
     set_seed(seed)
-    ds_weight = calculate_ds_weight(train_size)
+    ds_weight = 0.1
     model = FusionAblationNet(embed_dim=256, fusion=fusion).to(device)
     criterion = HybridLoss()
     optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
