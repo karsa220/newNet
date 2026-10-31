@@ -38,7 +38,7 @@ MODELS = [
     ("MKUnet", "main.py", "udiat.py", "BUS_UCLM.py"),
     ("CMUNet", "main.py", "udiat.py", "BUS_UCLM.py"),
     ("DPRASRNet", "main.py", "udiat.py", "BUS_UCLM.py"),
-    ("transunet", "main.py", "udiat.py", "BUS_UCLM.py"),
+    ("DBFNet", "main.py", "udiat.py", "BUS_UCLM.py"),
 ]
 
 # Three stages: (stage name, record file name, file index 0=busi 1=udiat 2=BUS-UCLM)
@@ -72,7 +72,9 @@ def parse_metrics(output):
         "hd95": find(r"HD95\s*:?\s*([\d.]+)"),
         "assd": find(r"ASSD\s*:?\s*([\d.]+)"),
         "nsd": find(r"NSD\s*:?\s*([\d.]+)"),
-        "infer_ms": find(r"Average time consumption\s*:?\s*([\d.]+)\s*ms"),
+        "infer_ms": find(
+            r"(?:Average time consumption|Average time)\s*:?\s*([\d.]+)\s*ms"
+        ),
         "fps": find(r"(?:F P S|FPS)\s*:?\s*([\d.]+)"),
     }
 

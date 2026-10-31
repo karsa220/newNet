@@ -176,6 +176,35 @@ You can then run the training/inference scripts as described in the project.
 
 ---
 
+## Comparison Baselines (`run_all.py`)
+
+`python run_all.py all` trains every baseline on all three datasets strictly in series
+(BUS-UCLM → UDIAT → BUSI) and writes `record_ALL.txt` plus one `record_<stage>.txt` per stage.
+
+| Folder | Model | Published | Backbone initialisation |
+|---|---|---|---|
+| `unet` | U-Net | 2015 | from scratch |
+| `unetplusplus` | UNet++ | 2018 | ImageNet ResNet-34 (`encoder_weights="imagenet"`) |
+| `swinunet` | Swin-UNet | 2022 | Swin-T ImageNet (`swinunet/pretrained_ckpt/swin_tiny_patch4_window7_224.pth`, falls back to scratch when absent) |
+| `hiformer` | HiFormer | 2022 | Swin-T ImageNet + ImageNet ResNet-34 (auto-downloaded on first import) |
+| `missformer` | MISSFormer | 2022 | from scratch |
+| `MKUnet` | MK-UNet | 2022 | from scratch |
+| `CMUNet` | CMU-Net | 2023 | from scratch |
+| `DBFNet` | DBF-Net | 2025 | from scratch |
+| `DPRASRNet` | DPRASR-Net (ours) | — | ImageNet DenseNet-121 |
+
+`DBFNet/` vendors the official DBF-Net implementation of Xu et al., *"DBF-Net: A Dual-Branch Network
+with Feature Fusion for Ultrasound Image Segmentation"*, IEEE ICIP 2025
+([code](https://github.com/apple1986/DBF-Net)). Its four auxiliary body/boundary heads are supervised
+with a 0.5 weight in addition to the fused main head, reproducing the official multi-head training.
+The reported BUSI Dice of the official release is 81.05.
+
+**Note on fairness:** baselines are initialised as in their original papers. `TransUNet` and `Swin-UNet`
+require official ImageNet checkpoints; `Swin-UNet` silently trains from scratch when the checkpoint is
+missing, so download it before running the comparison.
+
+---
+
 ## Evaluation, Profiling and Ablation Scripts
 
 All commands below are run from the repository root, with `PYTHONPATH` already set as described above.
