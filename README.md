@@ -185,7 +185,6 @@ You can then run the training/inference scripts as described in the project.
 |---|---|---|---|
 | `unet` | U-Net | 2015 | from scratch |
 | `unetplusplus` | UNet++ | 2018 | ImageNet ResNet-34 (`encoder_weights="imagenet"`) |
-| `swinunet` | Swin-UNet | 2022 | Swin-T ImageNet (`swinunet/pretrained_ckpt/swin_tiny_patch4_window7_224.pth`, falls back to scratch when absent) |
 | `hiformer` | HiFormer | 2022 | Swin-T ImageNet + ImageNet ResNet-34 (auto-downloaded on first import) |
 | `missformer` | MISSFormer | 2022 | from scratch |
 | `MKUnet` | MK-UNet | 2022 | from scratch |
@@ -199,9 +198,9 @@ with Feature Fusion for Ultrasound Image Segmentation"*, IEEE ICIP 2025
 with a 0.5 weight in addition to the fused main head, reproducing the official multi-head training.
 The reported BUSI Dice of the official release is 81.05.
 
-**Note on fairness:** baselines are initialised as in their original papers. `TransUNet` and `Swin-UNet`
-require official ImageNet checkpoints; `Swin-UNet` silently trains from scratch when the checkpoint is
-missing, so download it before running the comparison.
+**Note on fairness:** baselines are initialised as in their original papers. UNet++, HiFormer and
+DPRASR-Net use ImageNet-pretrained backbones, whereas U-Net, MISSFormer, MK-UNet, CMU-Net and
+DBF-Net are trained from scratch.
 
 ---
 

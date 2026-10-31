@@ -2,10 +2,10 @@
 """visualize_comparison.py
 ============================================================
 Generate segmentation black and white mask comparison images of multiple models on 2 data sets.
-Layout: 4 rows × 11 columns (number of dynamically adapted models)
+Layout: 4 rows × 10 columns (number of dynamically adapted models)
   - 4 rows: 2 ultrasound images from each of the 2 data sets (BUSI/UDIAT)
-  - 11 columns: original image | GT | DPRASRNet (green title, ours) | 8 comparison models
-        (UNet / Swin-UNet / DBF-Net / HiFormer / MISSFormer / MK-UNet / CMU-Net / UNet++)
+  - 10 columns: original image | GT | DPRASRNet (green title, ours) | 7 comparison models
+        (UNet / DBF-Net / HiFormer / MISSFormer / MK-UNet / CMU-Net / UNet++)
 
 Usage:
     python visualize_comparison.py
@@ -94,11 +94,10 @@ DATASETS = {
     },
 }
 
-# ---------- Model configuration (column order: DPRASRNet column 3, the remaining 8 comparisons) ----------
+# ---------- Model configuration (column order: DPRASRNet column 3, the remaining 7 comparisons) ----------
 MODELS = [
     {"key": "DPRASRNet", "name": "DPRASR-Net", "ours": True, "dir": "DPRASRNet"},
     {"key": "unet", "name": "UNet", "ours": False, "dir": "unet"},
-    {"key": "swinunet", "name": "Swin-UNet", "ours": False, "dir": "swinunet"},
     {"key": "DBFNet", "name": "DBF-Net", "ours": False, "dir": "DBFNet"},
     {"key": "hiformer", "name": "HiFormer", "ours": False, "dir": "hiformer"},
     {"key": "missformer", "name": "MISSFormer", "ours": False, "dir": "missformer"},
@@ -125,7 +124,7 @@ def weight_path(model_key, dataset):
 
 def get_size(model_key, dataset):
     """The input size of each model when training on each data set"""
-    if model_key in ("swinunet", "hiformer"):
+    if model_key == "hiformer":
         return 224
     if model_key == "missformer":
         return 256 if dataset == "udiat" else 224
@@ -155,15 +154,6 @@ def load_model(model_key, weight_p, img_size=None):
                 except ImportError:
                     from unet.main import UNet
                 model = UNet(n_channels=3, n_classes=1)
-
-        elif model_key == "swinunet":
-            with model_import_context(DPRASR / "swinunet"):
-                # Note: Import must be done after chdir(swinunet), otherwise the file will not be found when reading ./configs/ internally.
-                try:
-                    from swinunet.main import OfficialSwinUNetWrapper
-                except ImportError:
-                    from main import OfficialSwinUNetWrapper
-                model = OfficialSwinUNetWrapper(img_size=224, num_classes=1)
 
         elif model_key == "DBFNet":
             with model_import_context(DPRASR / "DBFNet"):
