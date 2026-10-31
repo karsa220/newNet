@@ -245,6 +245,18 @@ def get_paths(data_dir, dataset):
                     if os.path.exists(mp):
                         img_p.append(os.path.join(cat_dir, f))
                         mask_p.append(mp)
+    elif dataset == "BUS_UCLM":  # {benign,malign}/*.png + masks/*.png (same filenames)
+        masks_dir = os.path.join(data_dir, "masks")
+        for cat in ["benign", "malign"]:
+            cat_dir = os.path.join(data_dir, cat)
+            if not os.path.isdir(cat_dir):
+                continue
+            for f in sorted(os.listdir(cat_dir)):
+                if f.endswith(".png"):
+                    mp = os.path.join(masks_dir, f)
+                    if os.path.exists(mp):
+                        img_p.append(os.path.join(cat_dir, f))
+                        mask_p.append(mp)
     else:  # UDIAT: original/ + GT/
         img_dir, gt_dir = os.path.join(data_dir, "original"), os.path.join(data_dir, "GT")
         for f in sorted(os.listdir(img_dir)):
@@ -335,7 +347,7 @@ def train_and_eval(fusion, seed, loaders, device, train_size, args):
 # ----------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dataset", choices=["BUSI", "UDIAT"], default="BUSI")
+    ap.add_argument("--dataset", choices=["BUSI", "UDIAT", "BUS_UCLM"], default="BUSI")
     ap.add_argument("--data_dir", required=True)
     ap.add_argument("--seeds", type=int, nargs="+", default=[42, 43, 44])
     ap.add_argument("--epochs", type=int, default=200)

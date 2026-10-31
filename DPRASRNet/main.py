@@ -107,9 +107,11 @@ class AdaptiveCrossScaleSoftRouting(nn.Module):
     def forward(self, *features):
         B, C, H, W = features[0].shape
         concat_f = torch.cat(features, dim=1)
-        attn_weights = self.router(concat_f)                          # (B, K*C, H, W)
         if self.use_gap:
-            attn_weights = attn_weights + self.router(self.gap(concat_f))  # + GAP context term
+            # global context term first, then the pixel-wise term
+            attn_weights = self.router(self.gap(concat_f)) + self.router(concat_f)
+        else:
+            attn_weights = self.router(concat_f)
         attn_weights = attn_weights.view(B, self.num_scales, C, H, W)
         attn_weights = F.softmax(attn_weights, dim=1)
         stacked_f = torch.stack(features, dim=1)
