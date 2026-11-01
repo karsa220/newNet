@@ -4,8 +4,8 @@
 Generate segmentation black and white mask comparison images of multiple models on 2 data sets.
 Layout: two separate figures, one per data set (BUSI and UDIAT)
   - 4 rows: 4 ultrasound images per data set
-  - 10 columns: original image | GT | DPRASRNet (green title, ours) | 7 comparison models
-        (UNet / DBF-Net / HiFormer / MISSFormer / MK-UNet / CMU-Net / UNet++)
+  - 9 columns: original image | GT | DPRASRNet (green title, ours) | 6 comparison models
+        (UNet / DBF-Net / HiFormer / MISSFormer / MK-UNet / CMU-Net)
 
 Usage:
     python visualize_comparison.py
@@ -94,7 +94,7 @@ DATASETS = {
     },
 }
 
-# ---------- Model configuration (column order: DPRASRNet column 3, the remaining 7 comparisons) ----------
+# ---------- Model configuration (column order: DPRASRNet column 3, the remaining 6 comparisons) ----------
 MODELS = [
     {"key": "DPRASRNet", "name": "DPRASR-Net", "ours": True, "dir": "DPRASRNet"},
     {"key": "unet", "name": "UNet", "ours": False, "dir": "unet"},
@@ -103,7 +103,6 @@ MODELS = [
     {"key": "missformer", "name": "MISSFormer", "ours": False, "dir": "missformer"},
     {"key": "MKUnet", "name": "MK-UNet", "ours": False, "dir": "MKUnet"},
     {"key": "CMUNet", "name": "CMU-Net", "ours": False, "dir": "CMUNet"},
-    {"key": "unetplusplus", "name": "UNet++", "ours": False, "dir": "unetplusplus"},
 ]
 
 WEIGHT_NAMES = {
@@ -199,17 +198,6 @@ def load_model(model_key, weight_p, img_size=None):
                 from src.network.CMUNet import CMUNet
 
                 model = CMUNet(img_ch=3, output_ch=1, l=7, k=7)
-
-        elif model_key == "unetplusplus":
-            import segmentation_models_pytorch as smp
-
-            model = smp.UnetPlusPlus(
-                encoder_name="resnet34",
-                encoder_weights=None,
-                in_channels=3,
-                classes=1,
-                activation="sigmoid",
-            )
 
         else:
             return None
