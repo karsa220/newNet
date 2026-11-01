@@ -311,9 +311,16 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     files = args.files or ["record_busi_full.txt", "record_udiat_full.txt", "record_BUS-UCLM_full.txt"]
-    unknown = [m for m in args.metrics if m not in METRICS]
+    known = {m.lower(): m for m in METRICS}
+    metrics, unknown = [], []
+    for m in args.metrics:
+        canonical = known.get(m.lower())
+        if canonical is None:
+            unknown.append(m)
+        elif canonical not in metrics:
+            metrics.append(canonical)
     if unknown:
-        ap.error(f"unknown metric(s): {unknown}")
+        ap.error(f"unknown metric(s): {unknown}; choose from {METRICS}")
 
     records: dict[str, dict[str, dict[str, float]]] = {}
     for path in files:
@@ -350,10 +357,10 @@ def main(argv=None) -> int:
     records = dict(sorted(records.items(), key=lambda kv: order.get(kv[0], 99)))
 
     if args.layout == "matrix":
-        table = latex_table_matrix(records, args.metrics, args.caption, args.label,
+        table = latex_table_matrix(records, metrics, args.caption, args.label,
                                    single_column=not args.wide)
     else:
-        table = latex_table(records, args.metrics, args.caption, args.label)
+        table = latex_table(records, metrics, args.caption, args.label)
     print(table)
     if args.out:
         open(args.out, "w", encoding="utf-8").write(table + "\n")
@@ -361,7 +368,7 @@ def main(argv=None) -> int:
 
     print("\n--- best per metric ---", file=sys.stderr)
     for ds, models in records.items():
-        for m in args.metrics:
+        for m in metrics:
             present = [(n, r[m]) for n, r in models.items() if m in r]
             if not present:
                 continue
