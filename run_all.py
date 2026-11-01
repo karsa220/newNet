@@ -178,7 +178,32 @@ def run_stage(stage_name, record_name, file_idx):
         files = [busi_f, udiat_f, busuclm_f]
         script = files[file_idx]
         metrics, status = run_one(model, script, stage_name, i, total)
-        results.append((model, metrics, status))
+        results.append((model, metrics, status, script))
+
+    # Boundary pass: the baseline scripts only print five metrics, so HD95 /
+    # ASSD / NSD are recovered by re-running their test phase on the checkpoint
+    # that was just written (no extra training). Set RUN_ALL_NO_BOUNDARY=1 to skip.
+    if results and not os.environ.get("RUN_ALL_NO_BOUNDARY"):
+        try:
+            from eval_boundary import eval_one as _eval_one
+        except Exception as exc:  # pragma: no cover
+            print(f"  (boundary pass unavailable: {exc})")
+            _eval_one = None
+        if _eval_one:
+            print(f"\n{'#'*70}")
+            print(f"# Boundary pass (HD95 / ASSD / NSD) | stage: {stage_name}")
+            print(f"{'#'*70}")
+            sys.stdout.flush()
+            for i, (model, m, status, script) in enumerate(results, 1):
+                if status != "success" or m.get("hd95"):
+                    continue
+                ev_m, ev_status = _eval_one(model, script, stage_name, i, len(results))
+                for key in ("hd95", "assd", "nsd", "infer_ms", "fps"):
+                    if ev_m.get(key):
+                        m[key] = ev_m[key]
+                if ev_status != "success":
+                    print(f"  ⚠️ boundary rerun for {model}: {ev_status}")
+                sys.stdout.flush()
 
         # Generate final summary table content
     table_lines = []
@@ -196,7 +221,7 @@ def run_stage(stage_name, record_name, file_idx):
     table_lines.append(header)
     table_lines.append("-" * 130)
 
-    for model, m, status in results:
+    for model, m, status, _script in results:
         row = (
             f"{model :<16}{fmt (m .get ('dice')):<10}{fmt (m .get ('acc')):<10}"
             f"{fmt (m .get ('recall')):<10}{fmt (m .get ('iou')):<10}"
@@ -214,7 +239,7 @@ def run_stage(stage_name, record_name, file_idx):
     # Only the final table is written to record_*.txt files
     record_path.write_text(summary_text, encoding="utf-8")
 
-    ok = sum(1 for *_, s in results if s == "success")
+    ok = sum(1 for *_, s, _sc in results if s == "success")
     print(
         f"\nStage [{stage_name }] Finish:{ok }/{total }Success | Log file:{record_path }"
     )

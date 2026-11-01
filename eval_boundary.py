@@ -16,7 +16,8 @@ Usage:
     python eval_boundary.py udiat --models unet DBFNet
 
 Notes:
-    * DPRASRNet is skipped: its main.py already prints HD95/ASSD/NSD.
+    * DPRASRNet already prints HD95/ASSD/NSD during training; its row is taken
+      from logs/<stage>_DPRASRNet.log instead of being re-run.
     * Baselines without a checkpoint (e.g. a crashed run) are marked failed.
 """
 import os
@@ -120,12 +121,23 @@ def run_stage(stage_name, file_idx, only=None):
     total = len(MODELS)
     results = []
     for i, (model, busi_f, udiat_f, busuclm_f) in enumerate(MODELS, 1):
+        script = [busi_f, udiat_f, busuclm_f][file_idx]
         if model in SKIP:
-            print(f"\n  (skip {model}: already reports HD95/ASSD/NSD)")
+            # DPRASR-Net already prints all eight metrics during training, so its
+            # row is harvested from the training log instead of being re-run.
+            log = LOG_DIR / f"{stage_name}_{model}.log"
+            if only and model not in only:
+                continue
+            if not log.exists():
+                print(f"\n  (skip {model}: no training log at {log.name})")
+                results.append((model, {}, "no log"))
+                continue
+            text = log.read_text(encoding="utf-8", errors="replace")
+            print(f"\n  (harvest {model} from {log.name}: already reports HD95/ASSD/NSD)")
+            results.append((model, _merge_boundary(parse_metrics(text), text), "success"))
             continue
         if only and model not in only:
             continue
-        script = [busi_f, udiat_f, busuclm_f][file_idx]
         metrics, status = eval_one(model, script, stage_name, i, total)
         results.append((model, metrics, status))
 
