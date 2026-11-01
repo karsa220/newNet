@@ -176,7 +176,7 @@ def train_and_eval(weight_tag, ds_w, loaders, train_size, device, args):
 
     train_loader, val_loader, test_loader = loaders
     save_path = os.path.join(args.out_dir, f"best_{args.dataset}_ds{weight_tag}_seed{args.seed}.pth")
-    best_val, patience = 0.0, (5 if args.dataset == "BUSI" else 10)
+    best_val, patience = 0.0, 10
     no_improve = 0
 
     for epoch in range(args.epochs):

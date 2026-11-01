@@ -403,7 +403,7 @@ def main():
         )
 
         best_val_dice = 0.0
-        patience = 5
+        patience = 10
         no_improve_count = 0
 
         for epoch in range(num_epochs):
