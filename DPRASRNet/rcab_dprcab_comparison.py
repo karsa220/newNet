@@ -19,6 +19,7 @@ from tqdm import tqdm
 import math
 
 from main import AdaptiveCrossScaleSoftRouting, DPRCAB, ChannelAdapter, DPRASR_Net
+from boundary_metrics import boundary_metrics_batch
 
     # Dual-Pooling Residual Channel Attention Block
 
@@ -329,7 +330,7 @@ def main(block_type="dprcab"):
         )
 
         best_val_dice = 0.0
-        patience = 5
+        patience = 10
         no_improve_count = 0
         for epoch in range(num_epochs):
             model.train()
@@ -406,6 +407,7 @@ def main(block_type="dprcab"):
     model.eval()
 
     test_res = {"dice": [], "iou": [], "acc": [], "pre": [], "rec": []}
+    bd = {"hd95": [], "assd": [], "nsd": []}
     print("🔥 GPU warm-up (Warm-up) in progress...")
     dummy_input = torch.randn(1, 3, 256, 256).to(device)
     with torch.no_grad():
@@ -435,21 +437,102 @@ def main(block_type="dprcab"):
             for k in test_res.keys():
                 test_res[k].extend(metrics[k])
 
+            boundary = boundary_metrics_batch(outputs, masks)
+            for k in bd.keys():
+                bd[k].extend(boundary["per_sample"][k])
+
     avg_time_per_image = (total_infer_time / total_samples) * 1000
     fps = 1.0 / (total_infer_time / total_samples)
-    print("\n🏆 DPRASR-Net final test set results 🏆")
+    hd95 = float(np.nanmean(bd["hd95"]))
+    assd = float(np.nanmean(bd["assd"]))
+    nsd = float(np.nanmean(bd["nsd"]))
+    print(f"\n🏆 {block_type} final test set results 🏆")
     print(f"🔹 Dice     : {np .mean (test_res ['dice']):.4f}")
     print(f"🔹 IoU      : {np .mean (test_res ['iou']):.4f}")
     print(f"🔹 ACC      : {np .mean (test_res ['acc']):.4f}")
     print(f"🔹 Precision: {np .mean (test_res ['pre']):.4f}")
     print(f"🔹 Recall   : {np .mean (test_res ['rec']):.4f}")
+    print(f"🔹 HD95     : {hd95:.2f} px   ({np.sum(~np.isnan(bd['hd95']))}/{len(bd['hd95'])} valid)")
+    print(f"🔹 ASSD     : {assd:.2f} px")
+    print(f"🔹 NSD      : {nsd:.4f}   (tau=2 px)")
     print("-" * 50)
     print(f"⚡ Inference speed evaluation (Device:{device }) ⚡")
     print(f"⏱️Average time:{avg_time_per_image :.2f} ms / image")
     print(f"🚀 F P S    : {fps :.2f} frames / second")
     print("=" * 50)
-    return test_res
+    return {
+        "Dice": float(np.mean(test_res["dice"])),
+        "IoU": float(np.mean(test_res["iou"])),
+        "ACC": float(np.mean(test_res["acc"])),
+        "Precision": float(np.mean(test_res["pre"])),
+        "Recall": float(np.mean(test_res["rec"])),
+        "HD95": hd95,
+        "ASSD": assd,
+        "NSD": nsd,
+        "FPS": fps,
+    }
+
+
+def report_block_comparison(results):
+    """Write the RCAB vs DPRCAB table (8 metrics) for the UDIAT test set."""
+    keys = ["Dice", "IoU", "ACC", "Precision", "Recall", "HD95", "ASSD", "NSD"]
+    lower_better = {"HD95", "ASSD"}
+    best = {}
+    for k in keys:
+        vals = [r[k] for r in results.values()]
+        best[k] = min(vals) if k in lower_better else max(vals)
+
+    def cell(block, key):
+        v = results[block][key]
+        txt = f"{v:.2f}" if key in ("HD95", "ASSD") else f"{v:.4f}"
+        return rf"\textbf{{{txt}}}" if abs(v - best[key]) < 1e-9 else txt
+
+    names = {"rcab": r"RCAB \cite{rcab}", "dprcab": r"DPRCAB (Ours)"}
+    lines = [
+        r"\begin{table}[!t]",
+        r"\centering",
+        r"\caption{Channel attention block ablation on UDIAT (identical encoder, "
+        r"routing, deep supervision and training protocol).}",
+        r"\label{tab:rcab_dprcab}",
+        r"\setlength{\tabcolsep}{3pt}",
+        r"\begin{tabular}{l|ccccc|ccc}",
+        r"\hline",
+        r"Block & Dice$\uparrow$ & IoU$\uparrow$ & ACC$\uparrow$ & Pre$\uparrow$ & Rec$\uparrow$"
+        r" & HD95$\downarrow$ & ASSD$\downarrow$ & NSD$\uparrow$ \\",
+        r"\hline",
+    ]
+    for block in ("rcab", "dprcab"):
+        row = [names[block]] + [cell(block, k) for k in keys]
+        lines.append(" & ".join(row) + r" \\")
+    lines += [r"\hline", r"\end{tabular}", r"\end{table}"]
+
+    out = "rcab_dprcab_results_UDIAT.txt"
+    with open(out, "w", encoding="utf-8") as f:
+        f.write("RCAB vs DPRCAB (UDIAT, seed 42)\n")
+        f.write("=" * 80 + "\n")
+        f.write(f"{'Block':<12}" + "".join(f"{k:<11}" for k in keys) + "\n")
+        f.write("-" * 80 + "\n")
+        for block in ("rcab", "dprcab"):
+            row = f"{block:<12}" + "".join(
+                f"{results[block][k]:<11.4f}" for k in keys
+            )
+            f.write(row + "\n")
+        f.write("=" * 80 + "\n\n")
+        f.write("\n".join(lines) + "\n")
+
+    print("\n" + "=" * 80)
+    print("LaTeX table (Table: RCAB vs DPRCAB):")
+    print("=" * 80)
+    print("\n".join(lines))
+    print(f"\nSaved -> {out}")
 
 
 if __name__ == "__main__":
-    main("rcab")
+    both = {}
+    for block in ("rcab", "dprcab"):
+        print(f"\n{'#' * 70}\n# Block: {block}\n{'#' * 70}")
+        res = main(block)
+        if res:
+            both[block] = res
+    if both:
+        report_block_comparison(both)

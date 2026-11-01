@@ -16,6 +16,7 @@ from tqdm import tqdm
 from DPRASRNet.rcab_dprcab_comparison import RCAB
 
 from main import AdaptiveCrossScaleSoftRouting, DPRCAB, ChannelAdapter, DPRASR_Net
+from boundary_metrics import boundary_metrics_batch
 
 
 # ==========================================
@@ -366,6 +367,7 @@ def train_and_eval_variant(
     model.eval()
 
     test_res = {"dice": [], "iou": [], "acc": [], "pre": [], "rec": []}
+    bd = {"hd95": [], "assd": [], "nsd": []}
     with torch.no_grad():
         for images, masks in test_loader:
             images, masks = images.to(device), masks.to(device)
@@ -374,16 +376,24 @@ def train_and_eval_variant(
             for k in test_res.keys():
                 test_res[k].extend(metrics[k])
 
+            boundary = boundary_metrics_batch(outputs, masks)
+            for k in bd.keys():
+                bd[k].extend(boundary["per_sample"][k])
+
     results = {
         "Dice": np.mean(test_res["dice"]),
         "IoU": np.mean(test_res["iou"]),
         "ACC": np.mean(test_res["acc"]),
         "Precision": np.mean(test_res["pre"]),
         "Recall": np.mean(test_res["rec"]),
+        "HD95": float(np.nanmean(bd["hd95"])),
+        "ASSD": float(np.nanmean(bd["assd"])),
+        "NSD": float(np.nanmean(bd["nsd"])),
     }
 
     print(
-        f"✅ [{name }] Test completed! Dice:{results ['Dice']:.4f} | IoU: {results ['IoU']:.4f}"
+        f"✅ [{name }] Test completed! Dice:{results ['Dice']:.4f} | IoU: {results ['IoU']:.4f} "
+        f"| HD95: {results['HD95']:.2f} | ASSD: {results['ASSD']:.2f} | NSD: {results['NSD']:.4f}"
     )
     return results
 
@@ -467,7 +477,7 @@ def main():
             "use_rcab": True,
         },
         {
-            "name": r"w/o DPRCAB",
+            "name": r"w/o DPRCAB ",
             "use_acssr": True,
             "use_dprcab": False,
             "use_rcab": False,
@@ -491,14 +501,29 @@ def main():
         # ==========================================
         # Generate LaTeX code and write to file
         # ==========================================
-    metrics_keys = ["Dice", "IoU", "ACC", "Precision", "Recall"]
-    best_vals = {m: max([res[m] for res in all_results.values()]) for m in metrics_keys}
+    metrics_keys = ["Dice", "IoU", "ACC", "Precision", "Recall", "HD95", "ASSD", "NSD"]
+    lower_better = {"HD95", "ASSD"}
+    best_vals = {
+        m: (min if m in lower_better else max)(
+            [res[m] for res in all_results.values()]
+        )
+        for m in metrics_keys
+    }
+
+    def fmt_val(key, val):
+        txt = f"{val:.2f}" if key in lower_better else f"{val:.4f}"
+        return rf"\textbf{{{txt}}}" if abs(val - best_vals[key]) < 1e-9 else txt
 
     latex_lines = []
     latex_lines.append(
-        r"\textbf{Model Configuration} & \textbf{Dice} & \textbf{IoU} & \textbf{ACC} & \textbf{Precision} & \textbf{Recall} \\"
+        r"\textbf{Model Configuration} & \textbf{Dice}$\uparrow$ & \textbf{IoU}$\uparrow$"
+        r" & \textbf{ACC}$\uparrow$ & \textbf{Pre}$\uparrow$ & \textbf{Rec}$\uparrow$"
+        r" & \textbf{HD95}$\downarrow$ & \textbf{ASSD}$\downarrow$ & \textbf{NSD}$\uparrow$ \\"
     )
     latex_lines.append(r"\midrule")
+
+    plain_lines = ["Model Configuration".ljust(24) + "".join(k.ljust(11) for k in metrics_keys)]
+    plain_lines.append("-" * 110)
 
     for config in ablation_configs:
         name = config["name"]
@@ -510,14 +535,16 @@ def main():
         else:
             row_str = [name]
 
-        for m in metrics_keys:
-            val = res[m]
-            if abs(val - best_vals[m]) < 1e-6:
-                row_str.append(rf"\textbf{{{val :.4f}}}")
-            else:
-                row_str.append(f"{val :.4f}")
-
+        row_str += [fmt_val(m, res[m]) for m in metrics_keys]
         latex_lines.append(" & ".join(row_str) + r" \\")
+
+        plain_lines.append(
+            name.ljust(24)
+            + "".join(
+                f"{res[m]:<11.2f}" if m in lower_better else f"{res[m]:<11.4f}"
+                for m in metrics_keys
+            )
+        )
 
         # 1. Print to console
     print("\n\n" + "=" * 80)
@@ -526,10 +553,17 @@ def main():
     for line in latex_lines:
         print(line)
     print("\n" + "=" * 80)
+    for line in plain_lines:
+        print(line)
+    print("=" * 80)
 
     # 2. Write to file
     output_filename = "ablation_results.txt"
     with open(output_filename, "w", encoding="utf-8") as f:
+        f.write(f"Model ablation (UDIAT, seed 42)\n{'=' * 110}\n")
+        for line in plain_lines:
+            f.write(line + "\n")
+        f.write("\n" + "=" * 110 + "\n\n")
         for line in latex_lines:
             f.write(line + "\n")
 
