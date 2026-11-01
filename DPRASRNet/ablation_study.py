@@ -299,9 +299,16 @@ def train_and_eval_variant(
 
     ds_weight = 0.1
 
-    model = DPRASR_Net_Ablation(
-        embed_dim=256, use_dprcab=use_dprcab, use_acssr=use_acssr, use_rcab=use_rcab
-    ).to(device)
+    if use_dprcab and use_acssr and not use_rcab:
+        # The full model row reuses the production class from main.py, so that
+        # this row is exactly what udiat.py trains instead of a duplicated
+        # re-implementation that can silently drift out of sync.
+        model = DPRASR_Net(embed_dim=256).to(device)
+    else:
+        model = DPRASR_Net_Ablation(
+            embed_dim=256, use_dprcab=use_dprcab, use_acssr=use_acssr,
+            use_rcab=use_rcab,
+        ).to(device)
     criterion = HybridLoss()
     optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
     num_epochs = 200
