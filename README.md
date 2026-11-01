@@ -203,6 +203,53 @@ DBF-Net are trained from scratch.
 
 ---
 
+## Reproducing DPRASR-Net (main results)
+
+All three datasets are trained with **one fixed deep-supervision weight** `DS_W = 0.1`
+(defined in `DPRASRNet/main.py`). `udiat.py` and `BUS_UCLM.py` import it from `main.py`, so a single value governs
+BUSI, UDIAT and BUS-UCLM alike; override it only for ablations, e.g. `DS_W=0.2 python main.py ...`.
+
+Run each command **from inside `DPRASRNet/`** (the default data paths are relative: `../../data/...`):
+
+| Command | Dataset | Output weights |
+|---|---|---|
+| `python main.py --mode train --data_dir ../../data/Dataset_BUSI_with_GT --save_path best_busi.pth --epochs 200 --batch_size 8` | BUSI | `best_busi.pth` |
+| `python udiat.py` | UDIAT | `best_UDIAT.pth` |
+| `python BUS_UCLM.py` | BUS-UCLM | `best_bus_uclm.pth` |
+
+Switching `MODE` to `"test"` (`main.py --mode test`) loads the corresponding checkpoint and prints the
+final test-set metrics, including HD95 / ASSD / NSD (`tau = 2` px).
+
+Batch pipelines (from the repository root):
+
+```bash
+python run_all.py all        # trains the 6 baselines + this model on all three datasets, writes record_*.txt
+python eval_boundary.py busi # test-only re-run of every model, adds HD95/ASSD/NSD, writes record_busi_full.txt
+python visualize_comparison.py   # qualitative comparison -> comparison_busi.png / comparison_udiat.png
+```
+
+`eval_boundary.py` re-runs only the test phase of each script (`_eval_runner.py` flips `MODE` to `test`),
+so it never retrains; `run_all.py` calls it automatically after each stage.
+
+### Experiment-script map
+
+| Script | Purpose | Output |
+|---|---|---|
+| `DPRASRNet/main.py` | BUSI training / test entry point, `DS_W` defined here | `best_busi.pth` |
+| `DPRASRNet/udiat.py` | UDIAT entry point | `best_UDIAT.pth` |
+| `DPRASRNet/BUS_UCLM.py` | BUS-UCLM entry point | `best_bus_uclm.pth` |
+| `DPRASRNet/boundary_metrics.py` | HD95 / ASSD / NSD library (empty-mask safe) | imported, no CLI |
+| `DPRASRNet/acssr_ablation.py` | SKNet `select` vs channel routing vs **ACSSR** | `acssr_sknet_ablation_results.txt` |
+| `DPRASRNet/rcab_dprcab_comparison.py` | RCAB vs **DPRCAB** | `best_RCAB.pth` / `best_DPRCAB.pth` + stdout table |
+| `DPRASRNet/unet_decoder_ablation.py` | full model vs plain U-Net decoder (same DenseNet-121) | `decoder_ablation_results_<dataset>.txt` |
+| `DPRASRNet/static_weight_ablation.py` | no deep supervision vs `{0.1, 0.2, 0.3}` | `ds_weight_ablation_results_<dataset>.txt` |
+| `DPRASRNet/ablation_study.py` | component-wise ablation (encoder/decoder/DPRCAB/ACSSR) | `ablation_results.txt` |
+| `DPRASRNet/fusion_variants.py` | ACSSR fusion-rule self-test (no training) | stdout |
+| `DPRASRNet/profile_model.py` | parameters / MACs / FLOPs | stdout |
+| `run_all.py` / `eval_boundary.py` / `visualize_comparison.py` | baselines, boundary metrics, qualitative figures | `record_*.txt`, `comparison_*.png` |
+
+---
+
 ## Evaluation, Profiling and Ablation Scripts
 
 All commands below are run from the repository root, with `PYTHONPATH` already set as described above.
@@ -257,7 +304,7 @@ Output: `decoder_ablation_results_<dataset>.txt`.
 ### Deep-supervision weight ablation — `DPRASRNet/static_weight_ablation.py`
 
 No deep supervision vs. fixed deep-supervision weights (the proposed model uses a
-fixed `DS_W=0.2`, set via the `DS_W` environment variable).
+fixed `DS_W=0.1` for all three datasets; override with the `DS_W` environment variable only for ablations).
 
 ```bash
 python DPRASRNet/static_weight_ablation.py --dataset BUSI --data_dir ../data/Dataset_BUSI_with_GT \

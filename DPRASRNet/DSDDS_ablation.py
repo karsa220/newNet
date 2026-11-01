@@ -185,7 +185,7 @@ def main():
     DATASET = "BUSI"  # "BUSI" | "UDIAT"
 
     # 🔥 Ablation Experiment Options 🔥
-    # "static" : static weight (fixed to 0.2)
+    # "static" : static weight (fixed to 0.1, same as the main model)
     # "none" : no depth supervision (weight is 0)
     SUPERVISION_MODE = "none"
 
@@ -222,7 +222,7 @@ def main():
     # Determine ds_weight based on ablation experiment configuration
     # ------------------------------------------
     if SUPERVISION_MODE == "static":
-        ds_weight = 0.2
+        ds_weight = 0.1
         print(f"🎯 DS Weight [Static]: {ds_weight :.4f}")
     elif SUPERVISION_MODE == "none":
         ds_weight = 0.0
