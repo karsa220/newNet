@@ -471,16 +471,10 @@ def main():
             "use_rcab": False,
         },
         {
-            "name": r"w/o ACSSR use RCAB",
-            "use_acssr": False,
-            "use_dprcab": False,
-            "use_rcab": True,
-        },
-        {
-            "name": r"w/o DPRCAB ",
+            "name": r"ACSSR + RCAB",
             "use_acssr": True,
             "use_dprcab": False,
-            "use_rcab": False,
+            "use_rcab": True,
         },
         {
             "name": r"DPRASR-Net (Ours)",
