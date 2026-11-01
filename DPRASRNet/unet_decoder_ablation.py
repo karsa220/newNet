@@ -242,7 +242,7 @@ def train_and_eval(tag, model_fn, use_ds, loaders, train_size, device, args):
 
     train_loader, val_loader, test_loader = loaders
     save_path = os.path.join(args.out_dir, f"best_{args.dataset}_{tag}_seed{args.seed}.pth")
-    best_val, patience = 0.0, 10
+    best_val, patience = 0.0, (5 if args.dataset == "BUSI" else 10)
     no_improve = 0
 
     for epoch in range(args.epochs):

@@ -219,7 +219,7 @@ def main():
     if MODE == "train":
         num_epochs = 200
         best_val_dice = 0.0
-        patience = 10
+        patience = 5
         no_improve_count = 0
 
         optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)

@@ -260,6 +260,8 @@ def main():
 
         best_val_dice = 0.0
         patience = 10
+        if DATASET == "BUSI":
+            patience = 5
 
         no_improve_count = 0
 

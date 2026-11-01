@@ -329,7 +329,7 @@ def main(block_type="dprcab"):
         )
 
         best_val_dice = 0.0
-        patience = 10
+        patience = 5
         no_improve_count = 0
         for epoch in range(num_epochs):
             model.train()
