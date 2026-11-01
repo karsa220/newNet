@@ -528,8 +528,21 @@ def report_block_comparison(results):
 
 
 if __name__ == "__main__":
+    import argparse
+
+    ap = argparse.ArgumentParser(
+        description="RCAB versus DPRCAB on UDIAT, seed 42."
+    )
+    ap.add_argument(
+        "--blocks", nargs="+", choices=["rcab", "dprcab"],
+        default=["rcab", "dprcab"],
+        help="blocks to train; pass '--blocks rcab' when the DPRCAB row is "
+             "already available (it then reuses best_dprcab.pth if present)",
+    )
+    args = ap.parse_args()
+
     both = {}
-    for block in ("rcab", "dprcab"):
+    for block in args.blocks:
         print(f"\n{'#' * 70}\n# Block: {block}\n{'#' * 70}")
         res = main(block)
         if res:
