@@ -1,4 +1,5 @@
 from seed.set_seed import set_seed
+import argparse
 import os
 import random
 import time
@@ -403,7 +404,18 @@ def train_and_eval_variant(
 
 
 def main():
-    set_seed(42)
+    parser = argparse.ArgumentParser(
+        description="Component ablation on UDIAT. Run one variant per process "
+        "(--only 1..5) so that every variant starts from an identical RNG state; "
+        "training all variants in a single process makes the seed overhead "
+        "different for each row and inflates the variance."
+    )
+    parser.add_argument("--only", default=None,
+                        help="index (1-5) or name substring of the variant to run")
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args()
+
+    set_seed(args.seed)
     data_dir = (
         r"../../data/UDIAT_Dataset_B"  # Please modify it to your UDIAT data set path
     )
@@ -484,6 +496,19 @@ def main():
         },  # Full Model
     ]
 
+    if args.only:
+        sel = str(args.only).strip()
+        if sel.isdigit():
+            idx = int(sel)
+            if not 1 <= idx <= len(ablation_configs):
+                raise SystemExit(f"--only must be 1..{len(ablation_configs)}")
+            ablation_configs = [ablation_configs[idx - 1]]
+        else:
+            matched = [c for c in ablation_configs if sel.lower() in c["name"].lower()]
+            if not matched:
+                raise SystemExit(f"no variant matches --only {sel!r}")
+            ablation_configs = matched
+
     all_results = {}
 
     for config in ablation_configs:
@@ -552,9 +577,16 @@ def main():
     print("=" * 80)
 
     # 2. Write to file
-    output_filename = "ablation_results.txt"
+    if args.only:
+        tag = (
+            str(args.only) if str(args.only).isdigit()
+            else "".join(ch for ch in str(args.only).lower() if ch.isalnum() or ch in "-_")
+        )
+        output_filename = f"ablation_results_{tag}_seed{args.seed}.txt"
+    else:
+        output_filename = "ablation_results.txt"
     with open(output_filename, "w", encoding="utf-8") as f:
-        f.write(f"Model ablation (UDIAT, seed 42)\n{'=' * 110}\n")
+        f.write(f"Model ablation (UDIAT, seed {args.seed})\n{'=' * 110}\n")
         for line in plain_lines:
             f.write(line + "\n")
         f.write("\n" + "=" * 110 + "\n\n")
