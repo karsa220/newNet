@@ -466,6 +466,7 @@ class MISSFormer(nn.Module):
         token_mlp_mode="mix_skip",
         encoder_pretrained=True,
         img_size=224,
+        encoder_pretrained_path="pretrained/mit_b2.pth",
     ):
         super().__init__()
 
@@ -477,6 +478,9 @@ class MISSFormer(nn.Module):
 
         dims, layers = [[64, 128, 320, 512], [2, 2, 2, 2]]
         self.backbone = MiT(img_size, dims, layers, token_mlp_mode)
+
+        if encoder_pretrained:
+            self._load_encoder_pretrained(encoder_pretrained_path)
 
         self.reduction_ratios = [1, 2, 4, 8]
         self.bridge = BridegeBlock_4(64, 1, self.reduction_ratios)
@@ -514,6 +518,36 @@ class MISSFormer(nn.Module):
             n_class=num_classes,
             is_last=True,
         )
+
+    def _load_encoder_pretrained(self, path):
+        """Load ImageNet pre-trained MiT-b2 weights into the backbone.
+
+        The released checkpoint is the SegFormer classification model, so a
+        possible ``backbone.`` prefix is stripped and the load is done with
+        ``strict=False``: the decoder and any layer our MiT variant does not
+        have are simply skipped. Returns the number of loaded tensors.
+        """
+        import os
+
+        if not os.path.isfile(path):
+            print(
+                f"⚠️ MiT pre-trained weights not found at '{path}'; "
+                "the encoder will be trained from scratch. Download mit_b2.pth "
+                "from the SegFormer release page."
+            )
+            return 0
+        ckpt = torch.load(path, map_location="cpu")
+        sd = ckpt.get("state_dict", ckpt)
+        sd = {
+            (k[len("backbone."):] if k.startswith("backbone.") else k): v
+            for k, v in sd.items()
+        }
+        missing, unexpected = self.backbone.load_state_dict(sd, strict=False)
+        print(
+            f"✅ MiT pre-trained: loaded {len(sd) - len(unexpected)} tensors "
+            f"({len(missing)} missing, {len(unexpected)} unexpected)"
+        )
+        return len(sd) - len(unexpected)
 
     def _update_decoder_sizes(self, H4, W4):
         """Update the input_resolution of the decoder according to the actual bridge output size to adapt to any resolution."""

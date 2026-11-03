@@ -16,20 +16,21 @@ import matplotlib.pyplot as plt
 
 
 # ==========================================
-# 1. Ordinary U-Net model definition (new)
+# 1. U-Net with a DenseNet-121 (ImageNet pre-trained) encoder
 # ==========================================
+from torchvision import models as tv_models
+
+
 class DoubleConv(nn.Module):
     """(Conv2d => BatchNorm => ReLU) * 2"""
 
-    def __init__(self, in_channels, out_channels, mid_channels=None):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
-        if not mid_channels:
-            mid_channels = out_channels
         self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(mid_channels),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
         )
@@ -38,85 +39,55 @@ class DoubleConv(nn.Module):
         return self.double_conv(x)
 
 
-class Down(nn.Module):
-    """Downscaling with maxpool then double conv"""
-
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.maxpool_conv = nn.Sequential(
-            nn.MaxPool2d(2), DoubleConv(in_channels, out_channels)
-        )
-
-    def forward(self, x):
-        return self.maxpool_conv(x)
-
-
-class Up(nn.Module):
-    """Upscaling then double conv"""
-
-    def __init__(self, in_channels, out_channels, bilinear=True):
-        super().__init__()
-        # if bilinear, use the normal convolutions to reduce the number of channels
-        if bilinear:
-            self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
-            self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
-        else:
-            self.up = nn.ConvTranspose2d(
-                in_channels, in_channels // 2, kernel_size=2, stride=2
-            )
-            self.conv = DoubleConv(in_channels, out_channels)
-
-    def forward(self, x1, x2):
-        x1 = self.up(x1)
-        # input is CHW
-        diffY = x2.size()[2] - x1.size()[2]
-        diffX = x2.size()[3] - x1.size()[3]
-
-        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2])
-        x = torch.cat([x2, x1], dim=1)
-        return self.conv(x)
-
-
-class OutConv(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(OutConv, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
-
-    def forward(self, x):
-        return self.conv(x)
-
-
 class UNet(nn.Module):
-    def __init__(self, n_channels=3, n_classes=1, bilinear=False):
-        super(UNet, self).__init__()
-        self.n_channels = n_channels
-        self.n_classes = n_classes
-        self.bilinear = bilinear
+    """U-Net whose encoder is the ImageNet pre-trained DenseNet-121.
 
-        self.inc = DoubleConv(n_channels, 64)
-        self.down1 = Down(64, 128)
-        self.down2 = Down(128, 256)
-        self.down3 = Down(256, 512)
-        factor = 2 if bilinear else 1
-        self.down4 = Down(512, 1024 // factor)
-        self.up1 = Up(1024, 512 // factor, bilinear)
-        self.up2 = Up(512, 256 // factor, bilinear)
-        self.up3 = Up(256, 128 // factor, bilinear)
-        self.up4 = Up(128, 64, bilinear)
-        self.outc = OutConv(64, n_classes)
+    Skip connections are taken at the four encoder stages
+    (64, 256, 512, 1024 channels) and the bottleneck is the final
+    DenseBlock output (1024 channels), so the encoder initialisation
+    matches the one used by DPRASR-Net.
+    """
+
+    def __init__(self, n_channels=3, n_classes=1):
+        super(UNet, self).__init__()
+        densenet = tv_models.densenet121(
+            weights=tv_models.DenseNet121_Weights.DEFAULT
+        )
+        self.encoder = densenet.features
+
+        # Decoder: 1x1 reduce -> upsample -> concat skip -> DoubleConv
+        self.up3 = nn.Conv2d(1024, 512, kernel_size=1)
+        self.dec3 = DoubleConv(512 + 1024, 256)
+        self.up2 = nn.Conv2d(256, 128, kernel_size=1)
+        self.dec2 = DoubleConv(128 + 512, 128)
+        self.up1 = nn.Conv2d(128, 64, kernel_size=1)
+        self.dec1 = DoubleConv(64 + 256, 64)
+        self.up0 = nn.Conv2d(64, 32, kernel_size=1)
+        self.dec0 = DoubleConv(32 + 64, 32)
+        self.outc = nn.Conv2d(32, n_classes, kernel_size=1)
 
     def forward(self, x):
-        x1 = self.inc(x)
-        x2 = self.down1(x1)
-        x3 = self.down2(x2)
-        x4 = self.down3(x3)
-        x5 = self.down4(x4)
-        x = self.up1(x5, x4)
-        x = self.up2(x, x3)
-        x = self.up3(x, x2)
-        x = self.up4(x, x1)
-        logits = self.outc(x)
+        e = self.encoder
+        s0 = e.relu0(e.norm0(e.conv0(x)))              # 64   x 1/1
+        s1 = e.denseblock1(e.pool0(s0))                # 256  x 1/2
+        s2 = e.denseblock2(e.transition1(s1))          # 512  x 1/4
+        s3 = e.denseblock3(e.transition2(s2))          # 1024 x 1/8
+        b = e.norm5(e.denseblock4(e.transition3(s3)))  # 1024 x 1/16
 
+        d = F.interpolate(self.up3(b), size=s3.shape[2:], mode="bilinear",
+                          align_corners=False)
+        d = self.dec3(torch.cat([d, s3], dim=1))
+        d = F.interpolate(self.up2(d), size=s2.shape[2:], mode="bilinear",
+                          align_corners=False)
+        d = self.dec2(torch.cat([d, s2], dim=1))
+        d = F.interpolate(self.up1(d), size=s1.shape[2:], mode="bilinear",
+                          align_corners=False)
+        d = self.dec1(torch.cat([d, s1], dim=1))
+        d = F.interpolate(self.up0(d), size=s0.shape[2:], mode="bilinear",
+                          align_corners=False)
+        d = self.dec0(torch.cat([d, s0], dim=1))
+
+        logits = self.outc(d)
         # Use sigmoid activation to adapt nn.BCELoss
         return torch.sigmoid(logits)
 
