@@ -68,11 +68,11 @@ class UNet(nn.Module):
 
     def forward(self, x):
         e = self.encoder
-        s0 = e.relu0(e.norm0(e.conv0(x)))              # 64   x 1/1
-        s1 = e.denseblock1(e.pool0(s0))                # 256  x 1/2
-        s2 = e.denseblock2(e.transition1(s1))          # 512  x 1/4
-        s3 = e.denseblock3(e.transition2(s2))          # 1024 x 1/8
-        b = e.norm5(e.denseblock4(e.transition3(s3)))  # 1024 x 1/16
+        s0 = e.relu0(e.norm0(e.conv0(x)))              # 64   x 1/2
+        s1 = e.denseblock1(e.pool0(s0))                # 256  x 1/4
+        s2 = e.denseblock2(e.transition1(s1))          # 512  x 1/8
+        s3 = e.denseblock3(e.transition2(s2))          # 1024 x 1/16
+        b = e.norm5(e.denseblock4(e.transition3(s3)))  # 1024 x 1/32
 
         d = F.interpolate(self.up3(b), size=s3.shape[2:], mode="bilinear",
                           align_corners=False)
@@ -87,6 +87,11 @@ class UNet(nn.Module):
                           align_corners=False)
         d = self.dec0(torch.cat([d, s0], dim=1))
 
+        # DenseNet-121 downsamples 5x (conv0 stride-2 + 4 pools), so the
+        # decoder above ends at half the input resolution; upsample to the
+        # input size before the 1x1 head (same scheme as DPRASR-Net).
+        d = F.interpolate(d, size=x.shape[2:], mode="bilinear",
+                          align_corners=False)
         logits = self.outc(d)
         # Use sigmoid activation to adapt nn.BCELoss
         return torch.sigmoid(logits)
