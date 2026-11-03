@@ -7,8 +7,13 @@ import os
 from functools import partial
 
 import timm
-from timm.models.layers import trunc_normal_tf_
-from timm.models.helpers import named_apply
+try:
+    # timm >= 1.0 moved named_apply out of timm.models.helpers
+    from timm.models.layers import trunc_normal_tf_
+    from timm.models._manipulate import named_apply
+except ImportError:  # older timm (<= 0.9)
+    from timm.models.layers import trunc_normal_tf_
+    from timm.models.helpers import named_apply
 
 __all__ = ["MKUNet"]
 
