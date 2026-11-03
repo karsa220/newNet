@@ -1,4 +1,5 @@
 from seed.set_seed import set_seed
+import os
 import torch
 import torch.nn as nn
 from .segformer import *
@@ -466,9 +467,16 @@ class MISSFormer(nn.Module):
         token_mlp_mode="mix_skip",
         encoder_pretrained=True,
         img_size=224,
-        encoder_pretrained_path="pretrained/mit_b2.pth",
+        encoder_pretrained_path=None,
     ):
         super().__init__()
+
+        # Resolve the default weight location relative to this package (the
+        # missformer/ folder) so it is found regardless of the working
+        # directory the training script is launched from.
+        if encoder_pretrained_path is None:
+            _pkg_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            encoder_pretrained_path = os.path.join(_pkg_dir, "pretrained", "mit_b2.pth")
 
         reduction_ratios = [8, 4, 2, 1]
         heads = [1, 2, 5, 8]
@@ -519,35 +527,117 @@ class MISSFormer(nn.Module):
             is_last=True,
         )
 
+    # Default download source: the MiT-b2 ImageNet-1k weights converted by
+    # OpenMMLab (hosted on a CDN that is fast in China, no login required).
+    MIT_B2_URL = (
+        "https://download.openmmlab.com/mmsegmentation/v0.5/pretrain/"
+        "segformer/mit_b2_20220624-66e8bf70.pth"
+    )
+
     def _load_encoder_pretrained(self, path):
         """Load ImageNet pre-trained MiT-b2 weights into the backbone.
 
-        The released checkpoint is the SegFormer classification model, so a
-        possible ``backbone.`` prefix is stripped and the load is done with
-        ``strict=False``: the decoder and any layer our MiT variant does not
-        have are simply skipped. Returns the number of loaded tensors.
+        Accepts either the original SegFormer checkpoint format
+        (``patch_embed*/block*`` keys, fused ``attn.qkv``) or the OpenMMLab
+        converted format (``layers.*`` keys, ``nn.MultiheadAttention``
+        ``in_proj``). External keys are remapped onto this implementation,
+        which uses separate ``attn.q`` and ``attn.kv`` projections; the fused
+        projections are split accordingly. MISSFormer-specific parameters
+        (local-position dwconv, skip-connection norms) and deeper blocks kept
+        random. The load is ``strict=False``; returns loaded tensor count.
         """
         import os
+        import urllib.request
 
         if not os.path.isfile(path):
-            print(
-                f"⚠️ MiT pre-trained weights not found at '{path}'; "
-                "the encoder will be trained from scratch. Download mit_b2.pth "
-                "from the SegFormer release page."
-            )
-            return 0
+            try:
+                os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+                print(f"⏳ MiT-b2 weights not found; downloading from OpenMMLab -> {path}")
+                urllib.request.urlretrieve(self.MIT_B2_URL, path)
+            except Exception as exc:
+                print(
+                    f"⚠️ Could not download MiT-b2 weights ({exc}); the encoder "
+                    "will be trained from scratch."
+                )
+                return 0
         ckpt = torch.load(path, map_location="cpu")
         sd = ckpt.get("state_dict", ckpt)
         sd = {
             (k[len("backbone."):] if k.startswith("backbone.") else k): v
             for k, v in sd.items()
         }
+        sd = self._convert_encoder_state_dict(sd)
         missing, unexpected = self.backbone.load_state_dict(sd, strict=False)
+        loaded = len(sd) - len(unexpected)
         print(
-            f"✅ MiT pre-trained: loaded {len(sd) - len(unexpected)} tensors "
-            f"({len(missing)} missing, {len(unexpected)} unexpected)"
+            f"✅ MiT pre-trained: loaded {loaded} tensors "
+            f"({len(missing)} kept random, {len(unexpected)} skipped)"
         )
-        return len(sd) - len(unexpected)
+        return loaded
+
+    @staticmethod
+    def _convert_encoder_state_dict(sd):
+        """Remap an external MiT checkpoint onto this repo's MiT key layout."""
+        import re
+
+        if any(k.startswith("patch_embed") for k in sd):
+            # Original SegFormer format: identical key names except that the
+            # attention uses a fused qkv projection, which we split into q/kv.
+            out = {}
+            for k, v in sd.items():
+                m = re.match(r"block(\d+)\.(\d+)\.attn\.qkv\.(weight|bias)$", k)
+                if m:
+                    pre, wb = f"block{m[1]}.{m[2]}.attn", m[3]
+                    c = v.shape[0] // 3
+                    out[f"{pre}.q.{wb}"] = v[:c]
+                    out[f"{pre}.kv.{wb}"] = v[c:]
+                else:
+                    out[k] = v
+            return out
+
+        # OpenMMLab (mmsegmentation) format: layers.{stage}.0 = patch embed,
+        # layers.{stage}.1.{i} = block i, layers.{stage}.2 = final stage norm.
+        # Attention uses nn.MultiheadAttention (in_proj = [q; k; v]).
+        ffn_map = {"0": "fc1", "1": "dwconv.dwconv", "4": "fc2"}
+        out = {}
+        for k, v in sd.items():
+            m = re.match(r"layers\.(\d+)\.0\.projection\.(.+)$", k)
+            if m:
+                out[f"patch_embed{int(m[1]) + 1}.proj.{m[2]}"] = v
+                continue
+            m = re.match(r"layers\.(\d+)\.0\.norm\.(.+)$", k)
+            if m:
+                out[f"patch_embed{int(m[1]) + 1}.norm.{m[2]}"] = v
+                continue
+            m = re.match(r"layers\.(\d+)\.2\.(.+)$", k)
+            if m:
+                out[f"norm{int(m[1]) + 1}.{m[2]}"] = v
+                continue
+            m = re.match(r"layers\.(\d+)\.1\.(\d+)\.attn\.attn\.in_proj_(weight|bias)$", k)
+            if m:
+                pre, wb = f"block{int(m[1]) + 1}.{m[2]}.attn", m[3]
+                c = v.shape[0] // 3
+                out[f"{pre}.q.{wb}"] = v[:c]
+                out[f"{pre}.kv.{wb}"] = v[c:]
+                continue
+            m = re.match(r"layers\.(\d+)\.1\.(\d+)\.attn\.attn\.out_proj\.(.+)$", k)
+            if m:
+                out[f"block{int(m[1]) + 1}.{m[2]}.attn.proj.{m[3]}"] = v
+                continue
+            m = re.match(r"layers\.(\d+)\.1\.(\d+)\.attn\.(sr|norm)\.(.+)$", k)
+            if m:
+                out[f"block{int(m[1]) + 1}.{m[2]}.attn.{m[3]}.{m[4]}"] = v
+                continue
+            m = re.match(r"layers\.(\d+)\.1\.(\d+)\.(norm1|norm2)\.(.+)$", k)
+            if m:
+                out[f"block{int(m[1]) + 1}.{m[2]}.{m[3]}.{m[4]}"] = v
+                continue
+            m = re.match(r"layers\.(\d+)\.1\.(\d+)\.ffn\.layers\.(\d+)\.(.+)$", k)
+            if m:
+                out[f"block{int(m[1]) + 1}.{m[2]}.mlp.{ffn_map[m[3]]}.{m[4]}"] = v
+                continue
+            # Unknown key: dropped (counted as skipped by the caller).
+        return out
 
     def _update_decoder_sizes(self, H4, W4):
         """Update the input_resolution of the decoder according to the actual bridge output size to adapt to any resolution."""
